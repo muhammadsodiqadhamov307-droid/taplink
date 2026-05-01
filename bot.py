@@ -268,7 +268,10 @@ def build_application() -> Application:
             ],
         },
         fallbacks=[CommandHandler("start", start)],
-        allow_reentry=True,
+        # Keep this false because the text entry point is only for new questions
+        # after a previous form ended. If re-entry is enabled, every form answer
+        # is treated as a new entry and the bot asks for the name again.
+        allow_reentry=False,
     )
 
     application.add_handler(conversation)
