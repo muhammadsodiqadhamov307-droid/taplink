@@ -99,6 +99,18 @@ def with_admin_status(message_text: str, status: str) -> str:
     return "\n".join(lines)
 
 
+def extract_admin_card_value(message_text: str, label: str) -> str | None:
+    """Extract a value from the formatted admin question card."""
+    prefix = f"{label}: "
+
+    for line in message_text.splitlines():
+        if line.startswith(prefix):
+            value = line.removeprefix(prefix).strip()
+            return value or None
+
+    return None
+
+
 def new_question_markup() -> InlineKeyboardMarkup:
     """Return the reusable new-question inline button."""
     return InlineKeyboardMarkup(
@@ -313,8 +325,10 @@ async def handle_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
             return
 
+        user_name = extract_admin_card_value(query.message.text or "", "👤 Ism") or "foydalanuvchi"
         pending_responses[ADMIN_CHAT_ID] = {
             "user_chat_id": user_chat_id,
+            "user_name": user_name,
             "admin_message_id": query.message.message_id,
             "admin_message_text": query.message.text or "",
         }
@@ -326,7 +340,7 @@ async def handle_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE
             text="👩‍⚕️ Shifokor savolingizni ko'rib chiqmoqda. Tez orada javob yozadi.",
         )
         await query.message.reply_text(
-            "✍️ Siz ushbu foydalanuvchiga javob yozyapsiz. Javobingizni yozing:"
+            f"✍️ Siz {user_name} uchun javob yozyapsiz. Javobingizni yozing:"
         )
         return
 
@@ -377,7 +391,8 @@ async def handle_admin_response(update: Update, context: ContextTypes.DEFAULT_TY
         pending_response["admin_message_text"],
         "✅ Javob berildi!",
     )
-    await update.message.reply_text("✅ Javob foydalanuvchiga yuborildi.")
+    user_name = pending_response.get("user_name", "foydalanuvchi")
+    await update.message.reply_text(f"✅ Javob {user_name}ga yuborildi.")
 
 
 async def unexpected_after_form(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
