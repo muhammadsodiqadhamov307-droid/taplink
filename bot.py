@@ -72,9 +72,8 @@ async def update_admin_question_status(
     message_id: int,
     original_text: str,
     status: str,
-    reply_markup: InlineKeyboardMarkup | None = None,
 ) -> None:
-    """Edit the original admin question card while keeping inline buttons."""
+    """Edit the original admin question card and remove inline buttons."""
     if ADMIN_CHAT_ID is None:
         return
 
@@ -83,7 +82,6 @@ async def update_admin_question_status(
             chat_id=ADMIN_CHAT_ID,
             message_id=message_id,
             text=with_admin_status(original_text, status),
-            reply_markup=reply_markup,
         )
     except TelegramError as error:
         logger.warning("Could not update admin question status: %s", error)
@@ -216,11 +214,9 @@ async def handle_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE
             "user_info": user_info,
             "admin_message_id": query.message.message_id,
             "admin_message_text": query.message.text or "",
-            "admin_message_markup": query.message.reply_markup,
         }
         await query.edit_message_text(
-            text=with_admin_status(query.message.text or "", "⏳ Javob yozilmoqda..."),
-            reply_markup=query.message.reply_markup,
+            text=with_admin_status(query.message.text or "", "⏳ Javob yozilmoqda...")
         )
         await context.bot.send_message(
             chat_id=user_chat_id,
@@ -249,7 +245,6 @@ async def handle_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE
             query.message.message_id,
             query.message.text or "",
             "❌ Rad etildi!",
-            query.message.reply_markup,
         )
         await query.message.reply_text("❌ Rad etish xabari foydalanuvchiga yuborildi.")
 
@@ -278,7 +273,6 @@ async def handle_admin_response(update: Update, context: ContextTypes.DEFAULT_TY
         pending_response["admin_message_id"],
         pending_response["admin_message_text"],
         "✅ Javob berildi!",
-        pending_response.get("admin_message_markup"),
     )
     await update.message.reply_text("✅ Javob foydalanuvchiga yuborildi.")
 
