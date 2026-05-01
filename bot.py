@@ -49,6 +49,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return NAME
 
 
+async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Keep the admin out of the public user form."""
+    pending_responses.pop(ADMIN_CHAT_ID, None)
+    await update.message.reply_text(
+        "Admin rejimi yoqilgan. Foydalanuvchilardan kelgan savollarga inline tugmalar orqali javob bering."
+    )
+
+
 async def ask_name_again(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Ask the user to answer the name question again."""
     await update.message.reply_text("Iltimos, ismingizni matn ko'rinishida yozing:")
@@ -193,6 +201,9 @@ async def handle_admin_response(update: Update, context: ContextTypes.DEFAULT_TY
 
     user_chat_id = pending_responses.pop(ADMIN_CHAT_ID, None)
     if user_chat_id is None:
+        await update.message.reply_text(
+            "Javob yuborish uchun avval savol ostidagi \"✅ Javob berish\" tugmasini bosing."
+        )
         return
 
     admin_text = update.message.text
@@ -224,11 +235,15 @@ def build_application() -> Application:
             handle_admin_response,
         )
     )
+    application.add_handler(CommandHandler("start", admin_start, filters=filters.Chat(ADMIN_CHAT_ID)))
 
     conversation = ConversationHandler(
         entry_points=[
             CommandHandler("start", start),
-            MessageHandler(filters.TEXT & ~filters.COMMAND, unexpected_after_form),
+            MessageHandler(
+                filters.TEXT & ~filters.COMMAND & ~filters.Chat(ADMIN_CHAT_ID),
+                unexpected_after_form,
+            ),
         ],
         states={
             NAME: [
