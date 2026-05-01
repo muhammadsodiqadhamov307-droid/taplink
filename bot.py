@@ -63,7 +63,7 @@ def extract_admin_card_value(message_text: str, label: str) -> str | None:
 def new_question_markup() -> InlineKeyboardMarkup:
     """Return the reusable send-message inline button."""
     return InlineKeyboardMarkup(
-        [[InlineKeyboardButton("✉️ Xabar yuborish", callback_data="new_question")]]
+        [[InlineKeyboardButton("✉️ Yana xabar yuborish", callback_data="new_question")]]
     )
 
 
@@ -102,9 +102,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 async def new_question(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Restart the fresh form when the user taps the inline new-question button."""
+    """Start another message, reusing the info the user already gave."""
     query = update.callback_query
     await query.answer()
+
+    saved_info = context.user_data.get("saved_info")
+    if saved_info:
+        context.user_data["info"] = saved_info
+        context.user_data.pop("question", None)
+        await query.message.reply_text(
+            "❓ Qanday mavzuda yordam kerak — savolingizni to'liq yozib qoldiring"
+        )
+        return QUESTION
+
     return await begin_user_flow(query.message, context)
 
 
@@ -131,6 +141,7 @@ async def receive_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         return await ask_info_again(update, context)
 
     context.user_data["info"] = info
+    context.user_data["saved_info"] = info
     await update.message.reply_text(
         "❓ Qanday mavzuda yordam kerak — savolingizni to'liq yozib qoldiring"
     )
@@ -185,7 +196,9 @@ async def receive_question(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         reply_markup=keyboard,
     )
 
-    context.user_data.clear()
+    context.user_data["saved_info"] = context.user_data["info"]
+    context.user_data.pop("info", None)
+    context.user_data.pop("question", None)
     return ConversationHandler.END
 
 
