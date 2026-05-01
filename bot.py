@@ -1,5 +1,7 @@
 import logging
 import os
+import json
+from pathlib import Path
 
 from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -20,6 +22,9 @@ NAME, LOCATION, AGE, QUESTION = range(4)
 # The admin's next message is routed to the selected user through this map.
 pending_responses = {}
 
+# Persist remembered user names locally. This file is ignored by git.
+PROFILE_STORE_PATH = Path("user_profiles.json")
+
 
 load_dotenv()
 
@@ -37,14 +42,52 @@ logger = logging.getLogger(__name__)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
-def is_text_message(update: Update) -> bool:
-    """Return True when the incoming update has normal text content."""
-    return bool(update.message and update.message.text)
+def load_profiles() -> dict:
+    """Load remembered user names from disk."""
+    if not PROFILE_STORE_PATH.exists():
+        return {}
+
+    try:
+        return json.loads(PROFILE_STORE_PATH.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        logger.warning("Could not read user profile store; starting with an empty profile map.")
+        return {}
+
+
+def save_profiles(profiles: dict) -> None:
+    """Save remembered user names to disk."""
+    PROFILE_STORE_PATH.write_text(
+        json.dumps(profiles, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def get_saved_name(chat_id: int) -> str | None:
+    """Return a remembered name for this Telegram chat, if one exists."""
+    profile = load_profiles().get(str(chat_id), {})
+    name = profile.get("name")
+    return name if isinstance(name, str) and name.strip() else None
+
+
+def remember_name(chat_id: int, name: str) -> None:
+    """Remember the user's name so future forms can skip the name step."""
+    profiles = load_profiles()
+    profiles[str(chat_id)] = {"name": name}
+    save_profiles(profiles)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Start or restart the question form."""
     context.user_data.clear()
+    saved_name = get_saved_name(update.effective_chat.id)
+
+    if saved_name:
+        context.user_data["name"] = saved_name
+        await update.message.reply_text(
+            f"Assalomu alaykum, {saved_name}! Manzilingizni yoki shahringizni yozing:"
+        )
+        return LOCATION
+
     await update.message.reply_text("Assalomu alaykum! Iltimos, ismingizni yozing:")
     return NAME
 
@@ -70,6 +113,7 @@ async def receive_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         return await ask_name_again(update, context)
 
     context.user_data["name"] = name
+    remember_name(update.effective_chat.id, name)
     await update.message.reply_text("Manzilingizni yoki shahringizni yozing:")
     return LOCATION
 

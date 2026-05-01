@@ -5,6 +5,7 @@ dist/
 coverage/
 __pycache__/
 *.py[cod]
+user_profiles.json
 .DS_Store
 *.log
 .env*
