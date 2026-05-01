@@ -88,10 +88,10 @@ def remember_profile_field(chat_id: int, key: str, value: str) -> None:
     save_profiles(profiles)
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Start or restart the question form."""
+async def begin_user_flow(reply_target, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Start or restart the user flow using saved profile fields when available."""
     context.user_data.clear()
-    saved_profile = get_saved_profile(update.effective_chat.id)
+    saved_profile = get_saved_profile(chat_id)
     saved_name = get_profile_value(saved_profile, "name")
     saved_location = get_profile_value(saved_profile, "location")
     saved_age = get_profile_value(saved_profile, "age")
@@ -104,25 +104,37 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                 "age": saved_age,
             }
         )
-        await update.message.reply_text(
+        await reply_target.reply_text(
             "Qanday mavzuda yordam kerak — savolingizni to'liq yozib qoldiring"
         )
         return QUESTION
 
     if saved_name and saved_location:
         context.user_data.update({"name": saved_name, "location": saved_location})
-        await update.message.reply_text("Yoshingizni yozing:")
+        await reply_target.reply_text("Yoshingizni yozing:")
         return AGE
 
     if saved_name:
         context.user_data.update({"name": saved_name})
-        await update.message.reply_text(
+        await reply_target.reply_text(
             f"Assalomu alaykum, {saved_name}! Manzilingizni yoki shahringizni yozing:"
         )
         return LOCATION
 
-    await update.message.reply_text("Assalomu alaykum! Iltimos, ismingizni yozing:")
+    await reply_target.reply_text("Assalomu alaykum! Iltimos, ismingizni yozing:")
     return NAME
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Start or restart the question form."""
+    return await begin_user_flow(update.message, update.effective_chat.id, context)
+
+
+async def new_question(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Restart the form when the user taps the inline new-question button."""
+    query = update.callback_query
+    await query.answer()
+    return await begin_user_flow(query.message, query.from_user.id, context)
 
 
 async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -206,8 +218,13 @@ async def receive_question(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     context.user_data["question"] = question
     user_chat_id = update.effective_chat.id
 
+    new_question_keyboard = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("Yana savol berish", callback_data="new_question")]]
+    )
+
     await update.message.reply_text(
-        "Savolingiz qabul qilindi. Shifokor tez orada javob beradi."
+        "Savolingiz qabul qilindi. Shifokor tez orada javob beradi.",
+        reply_markup=new_question_keyboard,
     )
 
     if ADMIN_CHAT_ID is None:
@@ -319,6 +336,7 @@ def build_application() -> Application:
     conversation = ConversationHandler(
         entry_points=[
             CommandHandler("start", start),
+            CallbackQueryHandler(new_question, pattern="^new_question$"),
             MessageHandler(
                 filters.TEXT & ~filters.COMMAND & ~filters.Chat(ADMIN_CHAT_ID),
                 unexpected_after_form,
