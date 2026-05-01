@@ -61,9 +61,9 @@ def extract_admin_card_value(message_text: str, label: str) -> str | None:
 
 
 def new_question_markup() -> InlineKeyboardMarkup:
-    """Return the reusable new-question inline button."""
+    """Return the reusable send-message inline button."""
     return InlineKeyboardMarkup(
-        [[InlineKeyboardButton("➕ Yana savol berish", callback_data="new_question")]]
+        [[InlineKeyboardButton("✉️ Xabar yuborish", callback_data="new_question")]]
     )
 
 
