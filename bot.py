@@ -2,7 +2,7 @@ import logging
 import os
 
 from dotenv import load_dotenv
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, Update
 from telegram.error import TelegramError
 from telegram.ext import (
     Application,
@@ -20,6 +20,8 @@ INFO, QUESTION = range(2)
 
 # The admin's next message is routed to the selected user through this map.
 pending_responses = {}
+
+USER_NEW_QUESTION_BUTTON = "Yangi savol yuborish"
 
 
 load_dotenv()
@@ -60,10 +62,26 @@ def extract_admin_card_value(message_text: str, label: str) -> str | None:
     return None
 
 
-def new_question_markup() -> InlineKeyboardMarkup:
-    """Return the reusable send-message inline button."""
+def user_keyboard() -> ReplyKeyboardMarkup:
+    """Return the persistent user keyboard."""
+    return ReplyKeyboardMarkup(
+        [[USER_NEW_QUESTION_BUTTON]],
+        resize_keyboard=True,
+        one_time_keyboard=False,
+    )
+
+
+def continue_reply_markup() -> InlineKeyboardMarkup:
+    """Return the user inline button for replying after doctor/admin messages."""
     return InlineKeyboardMarkup(
-        [[InlineKeyboardButton("✉️ Yana xabar yuborish", callback_data="new_question")]]
+        [[InlineKeyboardButton("✍️ Javob yozish", callback_data="new_question")]]
+    )
+
+
+def admin_repeat_reply_markup(user_chat_id: int) -> InlineKeyboardMarkup:
+    """Return the admin inline button for sending another response to the same user."""
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("↩️ Qayta xabar yuborish", callback_data=f"reply:{user_chat_id}")]]
     )
 
 
@@ -91,7 +109,8 @@ async def begin_user_flow(reply_target, context: ContextTypes.DEFAULT_TYPE) -> i
     """Start a fresh user form every time."""
     context.user_data.clear()
     await reply_target.reply_text(
-        "👤 Sizga murojaat qilishimiz uchun iltimos ismingiz va yoshingizni yozing:"
+        "👤 Sizga murojaat qilishimiz uchun iltimos ismingiz va yoshingizni yozing:",
+        reply_markup=user_keyboard(),
     )
     return INFO
 
@@ -111,7 +130,8 @@ async def new_question(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         context.user_data["info"] = saved_info
         context.user_data.pop("question", None)
         await query.message.reply_text(
-            "❓ Qanday mavzuda yordam kerak — savolingizni to'liq yozib qoldiring"
+            "❓ Qanday mavzuda yordam kerak — savolingizni to'liq yozib qoldiring",
+            reply_markup=user_keyboard(),
         )
         return QUESTION
 
@@ -129,7 +149,8 @@ async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 async def ask_info_again(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Ask the user to submit their name and age again."""
     await update.message.reply_text(
-        "👤 Iltimos, ismingiz va yoshingizni matn ko'rinishida yozing:"
+        "👤 Iltimos, ismingiz va yoshingizni matn ko'rinishida yozing:",
+        reply_markup=user_keyboard(),
     )
     return INFO
 
@@ -143,7 +164,8 @@ async def receive_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     context.user_data["info"] = info
     context.user_data["saved_info"] = info
     await update.message.reply_text(
-        "❓ Qanday mavzuda yordam kerak — savolingizni to'liq yozib qoldiring"
+        "❓ Qanday mavzuda yordam kerak — savolingizni to'liq yozib qoldiring",
+        reply_markup=user_keyboard(),
     )
     return QUESTION
 
@@ -151,7 +173,8 @@ async def receive_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 async def ask_question_again(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Ask the user to submit the full question again."""
     await update.message.reply_text(
-        "❓ Iltimos, savolingizni matn ko'rinishida to'liq yozib qoldiring:"
+        "❓ Iltimos, savolingizni matn ko'rinishida to'liq yozib qoldiring:",
+        reply_markup=user_keyboard(),
     )
     return QUESTION
 
@@ -167,7 +190,6 @@ async def receive_question(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     await update.message.reply_text(
         "✅ Savolingiz qabul qilindi. Shifokor tez orada javob beradi.",
-        reply_markup=new_question_markup(),
     )
 
     if ADMIN_CHAT_ID is None:
@@ -251,7 +273,7 @@ async def handle_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE
                 "Uzr, hozirda sizning savolingizga javob berishning imkoni yo'q. "
                 "Iltimos, keyinroq qayta murojaat qiling."
             ),
-            reply_markup=new_question_markup(),
+            reply_markup=continue_reply_markup(),
         )
         await update_admin_question_status(
             context,
@@ -279,7 +301,7 @@ async def handle_admin_response(update: Update, context: ContextTypes.DEFAULT_TY
     await context.bot.send_message(
         chat_id=user_chat_id,
         text=f"👩‍⚕️ Dr. Farangisxon Yusufjonova:\n\n{admin_text}",
-        reply_markup=new_question_markup(),
+        reply_markup=continue_reply_markup(),
     )
     await update_admin_question_status(
         context,
@@ -287,7 +309,11 @@ async def handle_admin_response(update: Update, context: ContextTypes.DEFAULT_TY
         pending_response["admin_message_text"],
         "✅ Javob berildi!",
     )
-    await update.message.reply_text("✅ Javob foydalanuvchiga yuborildi.")
+    user_info = pending_response.get("user_info", "foydalanuvchi")
+    await update.message.reply_text(
+        f"✅ Javob foydalanuvchiga yuborildi.\n\nℹ️ Ma'lumot: {user_info}",
+        reply_markup=admin_repeat_reply_markup(user_chat_id),
+    )
 
 
 async def unexpected_after_form(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -316,6 +342,10 @@ def build_application() -> Application:
     conversation = ConversationHandler(
         entry_points=[
             CommandHandler("start", start),
+            MessageHandler(
+                filters.Regex(f"^{USER_NEW_QUESTION_BUTTON}$") & ~filters.Chat(ADMIN_CHAT_ID),
+                start,
+            ),
             CallbackQueryHandler(new_question, pattern="^new_question$"),
             MessageHandler(
                 filters.TEXT & ~filters.COMMAND & ~filters.Chat(ADMIN_CHAT_ID),
@@ -325,11 +355,13 @@ def build_application() -> Application:
         states={
             INFO: [
                 CommandHandler("start", start),
+                MessageHandler(filters.Regex(f"^{USER_NEW_QUESTION_BUTTON}$"), start),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_info),
                 MessageHandler(filters.ALL, ask_info_again),
             ],
             QUESTION: [
                 CommandHandler("start", start),
+                MessageHandler(filters.Regex(f"^{USER_NEW_QUESTION_BUTTON}$"), start),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_question),
                 MessageHandler(filters.ALL, ask_question_again),
             ],
