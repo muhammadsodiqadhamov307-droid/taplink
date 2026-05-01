@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Farangisxon Yusufjonova | Link in Bio</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --accent-pink: #d5538e;
+            --accent-hover: #c4427d;
+            --bg-light: #fff1f7;
+            --card-bg: rgba(255, 255, 255, 0.94);
+            --text-dark: #2d1b24;
+            --text-dim: #7a636c;
+            --transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(251, 207, 232, 0.48), transparent 34%),
+                linear-gradient(180deg, #fff7fb 0%, var(--bg-light) 45%, #ffeaf4 100%);
+            color: var(--text-dark);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* Abstract Background Globs */
+        .glow-blobs {
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            overflow: hidden;
+        }
+
+        .blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(100px);
+            opacity: 0.25;
+        }
+
+        .blob-1 {
+            top: -10%;
+            left: -10%;
+            width: 400px;
+            height: 400px;
+            background: #f9a8d4;
+        }
+
+        .blob-2 {
+            top: 40%;
+            right: -15%;
+            width: 500px;
+            height: 500px;
+            background: #fbcfe8;
+            opacity: 0.38;
+        }
+
+        .blob-3 {
+            bottom: -15%;
+            left: 20%;
+            width: 600px;
+            height: 400px;
+            background: #fce7f3; 
+        }
+
+        .container {
+            width: 100%;
+            max-width: 460px;
+            padding: 40px 24px;
+            z-index: 10;
+            opacity: 0;
+            transform: translateY(20px);
+            animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes slideUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .main-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(30px);
+            -webkit-backdrop-filter: blur(30px);
+            border: 1px solid rgba(219, 39, 119, 0.1);
+            border-radius: 40px;
+            padding: 40px 32px;
+            box-shadow: 0 20px 40px -10px rgba(219, 39, 119, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Profile Section */
+        .profile {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .avatar-container {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+
+        .avatar {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            border: 2px solid var(--accent-pink);
+            padding: 2px;
+            object-fit: cover;
+            object-position: center 20%;
+            background: white;
+        }
+
+        .status-dot {
+            position: absolute;
+            bottom: 5px;
+            right: 5px;
+            width: 16px;
+            height: 16px;
+            background: #10b981;
+            border: 3px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+            z-index: 2;
+        }
+
+        .name {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 4px;
+            color: var(--text-dark);
+        }
+
+        .bio-headline {
+            color: var(--accent-pink);
+            font-weight: 600;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            margin-bottom: 8px;
+        }
+
+        .bio-tagline {
+            font-size: 0.85rem;
+            color: var(--text-dim);
+            font-style: italic;
+            line-height: 1.6;
+            padding: 0 10px;
+        }
+
+        /* Link Buttons */
+        .links-list {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .link-btn {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            padding: 16px;
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid rgba(219, 39, 119, 0.05);
+            border-radius: 16px;
+            text-decoration: none;
+            color: var(--text-dark);
+            transition: var(--transition);
+        }
+
+        .link-btn:hover {
+            background: white;
+            border-color: rgba(219, 39, 119, 0.2);
+            transform: translateX(4px);
+            box-shadow: 0 5px 15px rgba(213, 83, 142, 0.1);
+        }
+
+        .link-btn i {
+            width: 40px;
+            height: 40px;
+            min-width: 40px;
+            border-radius: 12px;
+            background: rgba(213, 83, 142, 0.1);
+            color: var(--accent-pink);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-right: 16px;
+            font-size: 18px;
+        }
+
+        /* Footer Icons */
+        .footer-socials {
+            display: flex;
+            justify-content: center;
+            gap: 25px;
+            margin: 30px 0;
+        }
+
+        .footer-socials a {
+            color: var(--accent-pink);
+            font-size: 20px;
+            transition: opacity 0.2s;
+        }
+
+        .footer-socials a:hover {
+            opacity: 0.6;
+        }
+
+        .link-content {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .link-title {
+            font-weight: 700;
+            font-size: 0.9rem;
+            margin-bottom: 2px;
+        }
+
+        .link-subtitle {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+
+        /* Submit Button Special Styling */
+        .submit-trigger {
+            width: 100%;
+            margin-top: 24px;
+            padding: 16px;
+            background: var(--accent-pink);
+            color: white;
+            text-decoration: none;
+            border: none;
+            border-radius: 16px;
+            font-weight: 700;
+            font-size: 0.95rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: var(--transition);
+            box-shadow: 0 10px 20px -5px rgba(219, 39, 119, 0.2);
+        }
+
+        .submit-trigger:hover {
+            background: var(--accent-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 15px 30px -5px rgba(219, 39, 119, 0.3);
+        }
+
+        /* Form Card */
+        #questionSection {
+            display: none;
+            width: 100%;
+            margin-top: 20px;
+            animation: fadeIn 0.4s ease;
+        }
+
+        .form-group {
+            margin-bottom: 12px;
+        }
+
+        .form-control {
+            width: 100%;
+            background: white;
+            border: 1px solid var(--border-glass);
+            border-radius: 12px;
+            padding: 12px;
+            color: var(--text-dark);
+            font-size: 0.9rem;
+            outline: none;
+        }
+
+        .form-control:focus {
+            border-color: var(--accent-pink);
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: 32px;
+            text-align: center;
+            width: 100%;
+        }
+
+        .social-icons {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 20px;
+            opacity: 0.6;
+        }
+
+        .social-link {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: white;
+            color: var(--text-dim);
+            border: 1px solid var(--border-glass);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 14px;
+            transition: var(--transition);
+        }
+
+        .social-link:hover {
+            background: var(--accent-pink);
+            border-color: var(--accent-pink);
+            color: white;
+            opacity: 1;
+        }
+
+        .branding {
+            font-size: 10px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="glow-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <div class="container">
+        <div class="main-card">
+            <div id="app">
+                <!-- JS will populate this -->
+            </div>
+        </div>
+    </div>
+
+    <script src="./app-config.js"></script>
+    <script>
+        const CONFIG = window.APP_CONFIG;
+
+        function renderApp() {
+            const app = document.getElementById('app');
+            
+            let html = `
+                <div class="profile">
+                    <div class="avatar-container">
+                        <img src="${CONFIG.avatarUrl}" alt="${CONFIG.doctorName}" class="avatar" referrerPolicy="no-referrer">
+                        <div class="status-dot"></div>
+                    </div>
+                    <h1 class="name">${CONFIG.doctorName}</h1>
+                    <p class="bio-headline">${CONFIG.bioHeadline}</p>
+                    <p class="bio-tagline">${CONFIG.tagline}</p>
+                </div>
+
+                <div class="links-list">
+                    ${CONFIG.links.map(link => `
+                        <a href="${link.url}" class="link-btn" target="_blank" rel="noopener">
+                            <i class="${link.icon}"></i>
+                            <div class="link-content">
+                                <span class="link-title">${link.title}</span>
+                                <span class="link-subtitle">${link.subtitle}</span>
+                            </div>
+                        </a>
+                    `).join('')}
+                </div>
+
+                <a class="submit-trigger" href="${CONFIG.links[0].url}" target="_blank" rel="noopener">
+                    <i class="fa-solid fa-circle-question"></i>
+                    Savol berish
+                </a>
+
+                <div class="footer-socials">
+                    ${CONFIG.socials.map(social => `
+                        <a href="${social.url}" target="_blank" rel="noopener"><i class="${social.icon}"></i></a>
+                    `).join('')}
+                </div>
+
+                <div class="footer">
+                    <p class="branding">Made with love ${CONFIG.doctorName}</p>
+                </div>
+            `;
+
+            app.innerHTML = html;
+
+        }
+
+        document.addEventListener('DOMContentLoaded', renderApp);
+    </script>
+</body>
+</html>
