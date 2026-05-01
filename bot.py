@@ -5,6 +5,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import TelegramError
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -88,6 +89,43 @@ def remember_profile_field(chat_id: int, key: str, value: str) -> None:
     save_profiles(profiles)
 
 
+def with_admin_status(message_text: str, status: str) -> str:
+    """Replace the first line of the admin card with a status label."""
+    lines = message_text.splitlines()
+    if not lines:
+        return status
+
+    lines[0] = status
+    return "\n".join(lines)
+
+
+def new_question_markup() -> InlineKeyboardMarkup:
+    """Return the reusable new-question inline button."""
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("➕ Yana savol berish", callback_data="new_question")]]
+    )
+
+
+async def update_admin_question_status(
+    context: ContextTypes.DEFAULT_TYPE,
+    message_id: int,
+    original_text: str,
+    status: str,
+) -> None:
+    """Edit the original admin question card and remove inline buttons."""
+    if ADMIN_CHAT_ID is None:
+        return
+
+    try:
+        await context.bot.edit_message_text(
+            chat_id=ADMIN_CHAT_ID,
+            message_id=message_id,
+            text=with_admin_status(original_text, status),
+        )
+    except TelegramError as error:
+        logger.warning("Could not update admin question status: %s", error)
+
+
 async def begin_user_flow(reply_target, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Start or restart the user flow using saved profile fields when available."""
     context.user_data.clear()
@@ -105,23 +143,23 @@ async def begin_user_flow(reply_target, chat_id: int, context: ContextTypes.DEFA
             }
         )
         await reply_target.reply_text(
-            "Qanday mavzuda yordam kerak — savolingizni to'liq yozib qoldiring"
+            "❓ Qanday mavzuda yordam kerak — savolingizni to'liq yozib qoldiring"
         )
         return QUESTION
 
     if saved_name and saved_location:
         context.user_data.update({"name": saved_name, "location": saved_location})
-        await reply_target.reply_text("Yoshingizni yozing:")
+        await reply_target.reply_text("🎂 Yoshingizni yozing:")
         return AGE
 
     if saved_name:
         context.user_data.update({"name": saved_name})
         await reply_target.reply_text(
-            f"Assalomu alaykum, {saved_name}! Manzilingizni yoki shahringizni yozing:"
+            f"📍 Assalomu alaykum, {saved_name}! Manzilingizni yoki shahringizni yozing:"
         )
         return LOCATION
 
-    await reply_target.reply_text("Assalomu alaykum! Iltimos, ismingizni yozing:")
+    await reply_target.reply_text("👤 Assalomu alaykum! Iltimos, ismingizni yozing:")
     return NAME
 
 
@@ -141,13 +179,13 @@ async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     """Keep the admin out of the public user form."""
     pending_responses.pop(ADMIN_CHAT_ID, None)
     await update.message.reply_text(
-        "Admin rejimi yoqilgan. Foydalanuvchilardan kelgan savollarga inline tugmalar orqali javob bering."
+        "🛠 Admin rejimi yoqilgan. Foydalanuvchilardan kelgan savollarga inline tugmalar orqali javob bering."
     )
 
 
 async def ask_name_again(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Ask the user to answer the name question again."""
-    await update.message.reply_text("Iltimos, ismingizni matn ko'rinishida yozing:")
+    await update.message.reply_text("👤 Iltimos, ismingizni matn ko'rinishida yozing:")
     return NAME
 
 
@@ -159,13 +197,13 @@ async def receive_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
     context.user_data["name"] = name
     remember_profile_field(update.effective_chat.id, "name", name)
-    await update.message.reply_text("Manzilingizni yoki shahringizni yozing:")
+    await update.message.reply_text("📍 Manzilingizni yoki shahringizni yozing:")
     return LOCATION
 
 
 async def ask_location_again(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Ask the user to answer the location question again."""
-    await update.message.reply_text("Iltimos, manzilingizni yoki shahringizni matn ko'rinishida yozing:")
+    await update.message.reply_text("📍 Iltimos, manzilingizni yoki shahringizni matn ko'rinishida yozing:")
     return LOCATION
 
 
@@ -177,13 +215,13 @@ async def receive_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     context.user_data["location"] = location
     remember_profile_field(update.effective_chat.id, "location", location)
-    await update.message.reply_text("Yoshingizni yozing:")
+    await update.message.reply_text("🎂 Yoshingizni yozing:")
     return AGE
 
 
 async def ask_age_again(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Ask the user to answer the age question again."""
-    await update.message.reply_text("Iltimos, yoshingizni matn ko'rinishida yozing:")
+    await update.message.reply_text("🎂 Iltimos, yoshingizni matn ko'rinishida yozing:")
     return AGE
 
 
@@ -196,7 +234,7 @@ async def receive_age(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     context.user_data["age"] = age
     remember_profile_field(update.effective_chat.id, "age", age)
     await update.message.reply_text(
-        "Qanday mavzuda yordam kerak — savolingizni to'liq yozib qoldiring"
+        "❓ Qanday mavzuda yordam kerak — savolingizni to'liq yozib qoldiring"
     )
     return QUESTION
 
@@ -204,7 +242,7 @@ async def receive_age(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 async def ask_question_again(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Ask the user to submit the full question again."""
     await update.message.reply_text(
-        "Iltimos, savolingizni matn ko'rinishida to'liq yozib qoldiring:"
+        "❓ Iltimos, savolingizni matn ko'rinishida to'liq yozib qoldiring:"
     )
     return QUESTION
 
@@ -218,13 +256,9 @@ async def receive_question(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     context.user_data["question"] = question
     user_chat_id = update.effective_chat.id
 
-    new_question_keyboard = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("Yana savol berish", callback_data="new_question")]]
-    )
-
     await update.message.reply_text(
-        "Savolingiz qabul qilindi. Shifokor tez orada javob beradi.",
-        reply_markup=new_question_keyboard,
+        "✅ Savolingiz qabul qilindi. Shifokor tez orada javob beradi.",
+        reply_markup=new_question_markup(),
     )
 
     if ADMIN_CHAT_ID is None:
@@ -273,21 +307,49 @@ async def handle_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_chat_id = int(user_chat_id_raw)
 
     if action == "reply":
-        pending_responses[ADMIN_CHAT_ID] = user_chat_id
+        if ADMIN_CHAT_ID in pending_responses:
+            await query.message.reply_text(
+                "ℹ️ Avval oldingi foydalanuvchiga javobni yozib yuboring."
+            )
+            return
+
+        pending_responses[ADMIN_CHAT_ID] = {
+            "user_chat_id": user_chat_id,
+            "admin_message_id": query.message.message_id,
+            "admin_message_text": query.message.text or "",
+        }
+        await query.edit_message_text(
+            text=with_admin_status(query.message.text or "", "⏳ Javob yozilmoqda...")
+        )
+        await context.bot.send_message(
+            chat_id=user_chat_id,
+            text="👩‍⚕️ Shifokor savolingizni ko'rib chiqmoqda. Tez orada javob yozadi.",
+        )
         await query.message.reply_text(
-            "Siz ushbu foydalanuvchiga javob yozyapsiz. Javobingizni yozing:"
+            "✍️ Siz ushbu foydalanuvchiga javob yozyapsiz. Javobingizni yozing:"
         )
         return
 
     if action == "reject":
+        pending_response = pending_responses.get(ADMIN_CHAT_ID)
+        if pending_response and pending_response["user_chat_id"] == user_chat_id:
+            pending_responses.pop(ADMIN_CHAT_ID, None)
+
         await context.bot.send_message(
             chat_id=user_chat_id,
             text=(
                 "Uzr, hozirda sizning savolingizga javob berishning imkoni yo'q. "
                 "Iltimos, keyinroq qayta murojaat qiling."
             ),
+            reply_markup=new_question_markup(),
         )
-        await query.message.reply_text("Rad etish xabari foydalanuvchiga yuborildi.")
+        await update_admin_question_status(
+            context,
+            query.message.message_id,
+            query.message.text or "",
+            "❌ Rad etildi!",
+        )
+        await query.message.reply_text("❌ Rad etish xabari foydalanuvchiga yuborildi.")
 
 
 async def handle_admin_response(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -295,19 +357,27 @@ async def handle_admin_response(update: Update, context: ContextTypes.DEFAULT_TY
     if ADMIN_CHAT_ID is None or update.effective_chat.id != ADMIN_CHAT_ID:
         return
 
-    user_chat_id = pending_responses.pop(ADMIN_CHAT_ID, None)
-    if user_chat_id is None:
+    pending_response = pending_responses.pop(ADMIN_CHAT_ID, None)
+    if pending_response is None:
         await update.message.reply_text(
-            "Javob yuborish uchun avval savol ostidagi \"✅ Javob berish\" tugmasini bosing."
+            "ℹ️ Javob yuborish uchun avval savol ostidagi \"✅ Javob berish\" tugmasini bosing."
         )
         return
 
+    user_chat_id = pending_response["user_chat_id"]
     admin_text = update.message.text
     await context.bot.send_message(
         chat_id=user_chat_id,
         text=f"👩‍⚕️ Dr. Farangisxon Yusufjonova:\n\n{admin_text}",
+        reply_markup=new_question_markup(),
     )
-    await update.message.reply_text("Javob foydalanuvchiga yuborildi.")
+    await update_admin_question_status(
+        context,
+        pending_response["admin_message_id"],
+        pending_response["admin_message_text"],
+        "✅ Javob berildi!",
+    )
+    await update.message.reply_text("✅ Javob foydalanuvchiga yuborildi.")
 
 
 async def unexpected_after_form(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
