@@ -1,7 +1,5 @@
 import logging
 import os
-import json
-from pathlib import Path
 
 from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -17,14 +15,11 @@ from telegram.ext import (
 )
 
 
-# Conversation states for the user question form.
-NAME, LOCATION, AGE, QUESTION = range(4)
+# Conversation states for the fresh two-step user flow.
+INFO, QUESTION = range(2)
 
 # The admin's next message is routed to the selected user through this map.
 pending_responses = {}
-
-# Persist remembered user names locally. This file is ignored by git.
-PROFILE_STORE_PATH = Path("user_profiles.json")
 
 
 load_dotenv()
@@ -41,52 +36,6 @@ logger = logging.getLogger(__name__)
 
 # Keep third-party HTTP logs quiet so Telegram API URLs are not written to logs.
 logging.getLogger("httpx").setLevel(logging.WARNING)
-
-
-def load_profiles() -> dict:
-    """Load remembered user names from disk."""
-    if not PROFILE_STORE_PATH.exists():
-        return {}
-
-    try:
-        return json.loads(PROFILE_STORE_PATH.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        logger.warning("Could not read user profile store; starting with an empty profile map.")
-        return {}
-
-
-def save_profiles(profiles: dict) -> None:
-    """Save remembered user names to disk."""
-    PROFILE_STORE_PATH.write_text(
-        json.dumps(profiles, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-
-
-def get_saved_profile(chat_id: int) -> dict:
-    """Return remembered user profile fields for this Telegram chat."""
-    profile = load_profiles().get(str(chat_id), {})
-    return profile if isinstance(profile, dict) else {}
-
-
-def get_profile_value(profile: dict, key: str) -> str | None:
-    """Return a clean profile value when it exists."""
-    value = profile.get(key)
-    return value.strip() if isinstance(value, str) and value.strip() else None
-
-
-def remember_profile_field(chat_id: int, key: str, value: str) -> None:
-    """Remember one profile field so future forms can skip repeated questions."""
-    profiles = load_profiles()
-    chat_key = str(chat_id)
-    profile = profiles.get(chat_key, {})
-
-    if not isinstance(profile, dict):
-        profile = {}
-
-    profile[key] = value
-    profiles[chat_key] = profile
-    save_profiles(profiles)
 
 
 def with_admin_status(message_text: str, status: str) -> str:
@@ -138,53 +87,25 @@ async def update_admin_question_status(
         logger.warning("Could not update admin question status: %s", error)
 
 
-async def begin_user_flow(reply_target, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Start or restart the user flow using saved profile fields when available."""
+async def begin_user_flow(reply_target, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Start a fresh user form every time."""
     context.user_data.clear()
-    saved_profile = get_saved_profile(chat_id)
-    saved_name = get_profile_value(saved_profile, "name")
-    saved_location = get_profile_value(saved_profile, "location")
-    saved_age = get_profile_value(saved_profile, "age")
-
-    if saved_name and saved_location and saved_age:
-        context.user_data.update(
-            {
-                "name": saved_name,
-                "location": saved_location,
-                "age": saved_age,
-            }
-        )
-        await reply_target.reply_text(
-            "❓ Qanday mavzuda yordam kerak — savolingizni to'liq yozib qoldiring"
-        )
-        return QUESTION
-
-    if saved_name and saved_location:
-        context.user_data.update({"name": saved_name, "location": saved_location})
-        await reply_target.reply_text("🎂 Yoshingizni yozing:")
-        return AGE
-
-    if saved_name:
-        context.user_data.update({"name": saved_name})
-        await reply_target.reply_text(
-            f"📍 Assalomu alaykum, {saved_name}! Manzilingizni yoki shahringizni yozing:"
-        )
-        return LOCATION
-
-    await reply_target.reply_text("👤 Assalomu alaykum! Iltimos, ismingizni yozing:")
-    return NAME
+    await reply_target.reply_text(
+        "👤 Sizga murojaat qilishimiz uchun iltimos ismingiz va yoshingizni yozing:"
+    )
+    return INFO
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Start or restart the question form."""
-    return await begin_user_flow(update.message, update.effective_chat.id, context)
+    """Start or restart the fresh user form."""
+    return await begin_user_flow(update.message, context)
 
 
 async def new_question(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Restart the form when the user taps the inline new-question button."""
+    """Restart the fresh form when the user taps the inline new-question button."""
     query = update.callback_query
     await query.answer()
-    return await begin_user_flow(query.message, query.from_user.id, context)
+    return await begin_user_flow(query.message, context)
 
 
 async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -195,56 +116,21 @@ async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     )
 
 
-async def ask_name_again(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Ask the user to answer the name question again."""
-    await update.message.reply_text("👤 Iltimos, ismingizni matn ko'rinishida yozing:")
-    return NAME
+async def ask_info_again(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Ask the user to submit their name and age again."""
+    await update.message.reply_text(
+        "👤 Iltimos, ismingiz va yoshingizni matn ko'rinishida yozing:"
+    )
+    return INFO
 
 
-async def receive_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Store the user's name and ask for their location."""
-    name = update.message.text.strip()
-    if not name:
-        return await ask_name_again(update, context)
+async def receive_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Store the user's single info field and ask for their question."""
+    info = update.message.text.strip()
+    if not info:
+        return await ask_info_again(update, context)
 
-    context.user_data["name"] = name
-    remember_profile_field(update.effective_chat.id, "name", name)
-    await update.message.reply_text("📍 Manzilingizni yoki shahringizni yozing:")
-    return LOCATION
-
-
-async def ask_location_again(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Ask the user to answer the location question again."""
-    await update.message.reply_text("📍 Iltimos, manzilingizni yoki shahringizni matn ko'rinishida yozing:")
-    return LOCATION
-
-
-async def receive_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Store the user's location and ask for their age."""
-    location = update.message.text.strip()
-    if not location:
-        return await ask_location_again(update, context)
-
-    context.user_data["location"] = location
-    remember_profile_field(update.effective_chat.id, "location", location)
-    await update.message.reply_text("🎂 Yoshingizni yozing:")
-    return AGE
-
-
-async def ask_age_again(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Ask the user to answer the age question again."""
-    await update.message.reply_text("🎂 Iltimos, yoshingizni matn ko'rinishida yozing:")
-    return AGE
-
-
-async def receive_age(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Store the user's age and ask for their full question."""
-    age = update.message.text.strip()
-    if not age:
-        return await ask_age_again(update, context)
-
-    context.user_data["age"] = age
-    remember_profile_field(update.effective_chat.id, "age", age)
+    context.user_data["info"] = info
     await update.message.reply_text(
         "❓ Qanday mavzuda yordam kerak — savolingizni to'liq yozib qoldiring"
     )
@@ -280,11 +166,8 @@ async def receive_question(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     admin_message = (
         "📩 Yangi savol!\n\n"
-        f"👤 Ism: {context.user_data['name']}\n"
-        f"📍 Manzil: {context.user_data['location']}\n"
-        f"🎂 Yosh: {context.user_data['age']}\n"
-        f"❓ Savol: {context.user_data['question']}\n\n"
-        f"🆔 User ID: {user_chat_id}"
+        f"ℹ️ Ma'lumot: {context.user_data['info']}\n"
+        f"❓ Savol: {context.user_data['question']}"
     )
 
     keyboard = InlineKeyboardMarkup(
@@ -325,10 +208,10 @@ async def handle_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
             return
 
-        user_name = extract_admin_card_value(query.message.text or "", "👤 Ism") or "foydalanuvchi"
+        user_info = extract_admin_card_value(query.message.text or "", "ℹ️ Ma'lumot") or "foydalanuvchi"
         pending_responses[ADMIN_CHAT_ID] = {
             "user_chat_id": user_chat_id,
-            "user_name": user_name,
+            "user_info": user_info,
             "admin_message_id": query.message.message_id,
             "admin_message_text": query.message.text or "",
         }
@@ -340,7 +223,7 @@ async def handle_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE
             text="👩‍⚕️ Shifokor savolingizni ko'rib chiqmoqda. Tez orada javob yozadi.",
         )
         await query.message.reply_text(
-            f"✍️ Siz {user_name} uchun javob yozyapsiz. Javobingizni yozing:"
+            f"✍️ Siz ushbu ma'lumot egasiga javob yozyapsiz:\n\n{user_info}\n\nJavobingizni yozing:"
         )
         return
 
@@ -391,12 +274,11 @@ async def handle_admin_response(update: Update, context: ContextTypes.DEFAULT_TY
         pending_response["admin_message_text"],
         "✅ Javob berildi!",
     )
-    user_name = pending_response.get("user_name", "foydalanuvchi")
-    await update.message.reply_text(f"✅ Javob {user_name}ga yuborildi.")
+    await update.message.reply_text("✅ Javob foydalanuvchiga yuborildi.")
 
 
 async def unexpected_after_form(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Restart the form when a user sends a new message after finishing."""
+    """Start a fresh form when a user sends a new message after finishing."""
     return await start(update, context)
 
 
@@ -428,20 +310,10 @@ def build_application() -> Application:
             ),
         ],
         states={
-            NAME: [
+            INFO: [
                 CommandHandler("start", start),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_name),
-                MessageHandler(filters.ALL, ask_name_again),
-            ],
-            LOCATION: [
-                CommandHandler("start", start),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_location),
-                MessageHandler(filters.ALL, ask_location_again),
-            ],
-            AGE: [
-                CommandHandler("start", start),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_age),
-                MessageHandler(filters.ALL, ask_age_again),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_info),
+                MessageHandler(filters.ALL, ask_info_again),
             ],
             QUESTION: [
                 CommandHandler("start", start),
@@ -450,9 +322,7 @@ def build_application() -> Application:
             ],
         },
         fallbacks=[CommandHandler("start", start)],
-        # Keep this false because the text entry point is only for new questions
-        # after a previous form ended. If re-entry is enabled, every form answer
-        # is treated as a new entry and the bot asks for the name again.
+        # Keep this false so normal text answers advance the current state.
         allow_reentry=False,
     )
 
