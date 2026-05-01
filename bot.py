@@ -62,27 +62,60 @@ def save_profiles(profiles: dict) -> None:
     )
 
 
-def get_saved_name(chat_id: int) -> str | None:
-    """Return a remembered name for this Telegram chat, if one exists."""
+def get_saved_profile(chat_id: int) -> dict:
+    """Return remembered user profile fields for this Telegram chat."""
     profile = load_profiles().get(str(chat_id), {})
-    name = profile.get("name")
-    return name if isinstance(name, str) and name.strip() else None
+    return profile if isinstance(profile, dict) else {}
 
 
-def remember_name(chat_id: int, name: str) -> None:
-    """Remember the user's name so future forms can skip the name step."""
+def get_profile_value(profile: dict, key: str) -> str | None:
+    """Return a clean profile value when it exists."""
+    value = profile.get(key)
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def remember_profile_field(chat_id: int, key: str, value: str) -> None:
+    """Remember one profile field so future forms can skip repeated questions."""
     profiles = load_profiles()
-    profiles[str(chat_id)] = {"name": name}
+    chat_key = str(chat_id)
+    profile = profiles.get(chat_key, {})
+
+    if not isinstance(profile, dict):
+        profile = {}
+
+    profile[key] = value
+    profiles[chat_key] = profile
     save_profiles(profiles)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Start or restart the question form."""
     context.user_data.clear()
-    saved_name = get_saved_name(update.effective_chat.id)
+    saved_profile = get_saved_profile(update.effective_chat.id)
+    saved_name = get_profile_value(saved_profile, "name")
+    saved_location = get_profile_value(saved_profile, "location")
+    saved_age = get_profile_value(saved_profile, "age")
+
+    if saved_name and saved_location and saved_age:
+        context.user_data.update(
+            {
+                "name": saved_name,
+                "location": saved_location,
+                "age": saved_age,
+            }
+        )
+        await update.message.reply_text(
+            "Qanday mavzuda yordam kerak — savolingizni to'liq yozib qoldiring"
+        )
+        return QUESTION
+
+    if saved_name and saved_location:
+        context.user_data.update({"name": saved_name, "location": saved_location})
+        await update.message.reply_text("Yoshingizni yozing:")
+        return AGE
 
     if saved_name:
-        context.user_data["name"] = saved_name
+        context.user_data.update({"name": saved_name})
         await update.message.reply_text(
             f"Assalomu alaykum, {saved_name}! Manzilingizni yoki shahringizni yozing:"
         )
@@ -113,7 +146,7 @@ async def receive_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         return await ask_name_again(update, context)
 
     context.user_data["name"] = name
-    remember_name(update.effective_chat.id, name)
+    remember_profile_field(update.effective_chat.id, "name", name)
     await update.message.reply_text("Manzilingizni yoki shahringizni yozing:")
     return LOCATION
 
@@ -131,6 +164,7 @@ async def receive_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return await ask_location_again(update, context)
 
     context.user_data["location"] = location
+    remember_profile_field(update.effective_chat.id, "location", location)
     await update.message.reply_text("Yoshingizni yozing:")
     return AGE
 
@@ -148,6 +182,7 @@ async def receive_age(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         return await ask_age_again(update, context)
 
     context.user_data["age"] = age
+    remember_profile_field(update.effective_chat.id, "age", age)
     await update.message.reply_text(
         "Qanday mavzuda yordam kerak — savolingizni to'liq yozib qoldiring"
     )
