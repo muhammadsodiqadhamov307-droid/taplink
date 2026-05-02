@@ -32,6 +32,12 @@ pip install -r requirements.txt
 
 ## Run Locally
 
+Build the React admin Mini App:
+
+```bash
+npm run build
+```
+
 Start the Mini App backend:
 
 ```bash

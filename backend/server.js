@@ -16,7 +16,10 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..");
-const frontendDir = path.join(projectRoot, "frontend");
+const frontendDistDir = path.join(projectRoot, "frontend", "dist");
+const frontendDir = fs.existsSync(frontendDistDir)
+  ? frontendDistDir
+  : path.join(projectRoot, "frontend");
 const uploadsDir = path.join(__dirname, "uploads");
 
 const PORT = Number(process.env.PORT || 3000);
