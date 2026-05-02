@@ -21,14 +21,19 @@ const uploadsDir = path.join(__dirname, "uploads");
 
 const PORT = Number(process.env.PORT || 3000);
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const ADMIN_TELEGRAM_ID = String(process.env.ADMIN_TELEGRAM_ID || process.env.ADMIN_CHAT_ID || "");
+const ADMIN_CHAT_ID_VALUE = String(process.env.ADMIN_CHAT_ID || "").trim();
+const ADMIN_TELEGRAM_ID_VALUE = String(process.env.ADMIN_TELEGRAM_ID || "").trim();
+const ADMIN_TELEGRAM_ID = ADMIN_CHAT_ID_VALUE || ADMIN_TELEGRAM_ID_VALUE;
+const ADMIN_TELEGRAM_IDS = new Set([ADMIN_CHAT_ID_VALUE, ADMIN_TELEGRAM_ID_VALUE].filter(Boolean));
 const DATABASE_URL = process.env.DATABASE_URL || "sqlite://backend/chat.db";
+const BASE_URL = (process.env.BASE_URL || `http://localhost:${PORT}`).replace(/\/$/, "");
+const INTERNAL_API_TOKEN = process.env.INTERNAL_API_TOKEN || "";
 
 if (!BOT_TOKEN) {
   throw new Error("BOT_TOKEN is required");
 }
 
-if (!ADMIN_TELEGRAM_ID) {
+if (!ADMIN_TELEGRAM_IDS.size) {
   throw new Error("ADMIN_TELEGRAM_ID or ADMIN_CHAT_ID is required");
 }
 
@@ -143,7 +148,7 @@ function getRequestUser(req) {
   if (validated) {
     return {
       ...validated,
-      isAdmin: validated.telegramId === ADMIN_TELEGRAM_ID,
+      isAdmin: ADMIN_TELEGRAM_IDS.has(validated.telegramId),
     };
   }
 
@@ -153,7 +158,7 @@ function getRequestUser(req) {
       telegramId,
       firstName: process.env.DEV_FIRST_NAME || "Dev User",
       username: "dev",
-      isAdmin: telegramId === ADMIN_TELEGRAM_ID,
+      isAdmin: ADMIN_TELEGRAM_IDS.has(telegramId),
     };
   }
 
@@ -214,6 +219,48 @@ async function createMessage({ senderId, receiverId, content, type, fileUrl, fil
     `,
     result.lastID,
   );
+}
+
+async function getMessageById(id) {
+  return db.get(
+    `
+      SELECT id, sender_id, receiver_id, content, type, file_url, file_name, timestamp, is_read
+      FROM messages
+      WHERE id = ?
+    `,
+    id,
+  );
+}
+
+function absoluteUrl(url) {
+  if (!url) {
+    return "";
+  }
+
+  return url.startsWith("http://") || url.startsWith("https://")
+    ? url
+    : `${BASE_URL}${url}`;
+}
+
+async function sendTelegramMessage(chatId, message) {
+  const fileLine = message.file_url ? `\n\n${absoluteUrl(message.file_url)}` : "";
+  const text = message.type === "text"
+    ? message.content
+    : `${message.content || message.file_name || "Fayl"}${fileLine}`;
+
+  const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: `👩‍⚕️ Dr. Farangisxon Yusufjonova:\n\n${text}`,
+      disable_web_page_preview: false,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Telegram sendMessage failed: ${await response.text()}`);
+  }
 }
 
 async function getAdminUsers() {
@@ -332,6 +379,25 @@ app.post("/api/uploads", requireTelegramUser, upload.single("file"), async (req,
   });
 });
 
+app.post("/api/internal/messages/:id/notify", async (req, res) => {
+  if (!INTERNAL_API_TOKEN || req.get("x-internal-api-token") !== INTERNAL_API_TOKEN) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  const message = await getMessageById(req.params.id);
+  if (!message) {
+    res.status(404).json({ error: "Message not found" });
+    return;
+  }
+
+  io.to(`user:${message.sender_id}`).emit("message:new", message);
+  io.to(`user:${message.receiver_id}`).emit("message:new", message);
+  io.to("admin").emit("message:new", message);
+  io.to("admin").emit("admin:users", await getAdminUsers());
+  res.json({ ok: true });
+});
+
 io.use((socket, next) => {
   const user = validateInitData(socket.handshake.auth?.initData);
 
@@ -348,7 +414,7 @@ io.use((socket, next) => {
 
   socket.telegramUser = {
     ...telegramUser,
-    isAdmin: telegramUser.telegramId === ADMIN_TELEGRAM_ID,
+    isAdmin: ADMIN_TELEGRAM_IDS.has(telegramUser.telegramId),
   };
   next();
 });
@@ -379,6 +445,10 @@ io.on("connection", async (socket) => {
         fileUrl: payload.fileUrl,
         fileName: payload.fileName,
       });
+
+      if (isAdmin) {
+        await sendTelegramMessage(receiverId, message);
+      }
 
       io.to(`user:${message.sender_id}`).emit("message:new", message);
       io.to(`user:${message.receiver_id}`).emit("message:new", message);

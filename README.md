@@ -1,28 +1,11 @@
-# Dr. Farangisxon Telegram Mini App
+# Dr. Farangisxon Telegram Admin Mini App
 
-This project now contains two pieces:
+This project contains:
 
-- A Telegram bot that collects the user's first name and age, then opens the Mini App.
-- A real-time Telegram Mini App chat where users and the doctor can exchange text, images, videos, and files.
+- A Telegram bot where regular users send their name, age, and messages.
+- A doctor/admin-only Telegram Mini App dashboard where the doctor sees all user chats and replies.
 
-The Mini App uses Node.js, Express, Socket.IO, SQLite, and a plain HTML/CSS/JS frontend.
-
-## Project Structure
-
-```text
-backend/
-  server.js
-  bot.py
-  uploads/
-frontend/
-  index.html
-  style.css
-  app.js
-bot.py
-requirements.txt
-package.json
-.env.example
-```
+The backend uses Node.js, Express, Socket.IO, SQLite, and file uploads. The bot uses `python-telegram-bot`.
 
 ## Environment
 
@@ -33,6 +16,8 @@ BOT_TOKEN="your_telegram_bot_token"
 ADMIN_TELEGRAM_ID="your_telegram_user_id"
 BASE_URL="https://yourdomain.com"
 DATABASE_URL="sqlite://backend/chat.db"
+INTERNAL_API_TOKEN="change_me_to_a_random_secret"
+INTERNAL_API_BASE_URL="http://localhost:3000"
 PORT=3000
 ```
 
@@ -40,15 +25,8 @@ PORT=3000
 
 ## Install
 
-Install Node dependencies:
-
 ```bash
 npm install
-```
-
-Install Python bot dependencies:
-
-```bash
 pip install -r requirements.txt
 ```
 
@@ -66,25 +44,31 @@ Start the Telegram bot in another terminal:
 python bot.py
 ```
 
-Telegram Mini Apps must be opened over HTTPS. For local testing, expose port `3000` with ngrok or another HTTPS tunnel, then set `BASE_URL` to that HTTPS URL.
+Telegram Mini Apps require HTTPS. For local testing, expose port `3000` with Cloudflare Tunnel or ngrok, then set `BASE_URL` to that HTTPS URL.
 
 ## Behavior
 
-Bot:
+Regular users:
 
-- `/start` asks for first name.
-- Then it asks for age.
-- It stores the user in SQLite.
-- It sends a Telegram Web App button: `💬 Doctor bilan chat`.
+- Use the Telegram bot only.
+- `/start` asks for first name and age.
+- Then the bot asks for the user's message.
+- Future messages sent to the bot are saved and shown in the doctor Mini App.
+- Doctor replies from the Mini App are sent back through the Telegram bot.
 
-Mini App:
+Doctor/admin:
 
-- Regular users see one WhatsApp-style chat with the doctor.
-- The doctor sees a two-panel admin interface with all users on the left and the selected chat on the right.
-- Text, images, videos, and files are stored in SQLite and served from `backend/uploads`.
-- Socket.IO updates both sides in real time.
-- Telegram `initData` is validated on the backend before trusting identity.
+- Sends `/start` to the bot.
+- Receives an admin Mini App button.
+- Opens a two-panel dashboard: users on the left, selected chat on the right.
+- Can reply from the Mini App; replies go to the user in Telegram.
+
+Security:
+
+- Mini App auth validates Telegram `initData`.
+- Admin dashboard is shown only when Telegram user ID matches `ADMIN_TELEGRAM_ID`.
+- Bot-to-backend live updates use `INTERNAL_API_TOKEN`.
 
 ## Deploy
 
-This is no longer a Netlify-only static app. The Mini App needs a server that can run Node.js, WebSockets, SQLite/PostgreSQL, and file uploads. Deploy it to a VPS, Render, Railway, Fly.io, or another backend-capable host, then set `BASE_URL` to the HTTPS deployment URL.
+This is not a Netlify-only static app. It needs a backend host that supports Node.js, WebSockets, SQLite/PostgreSQL, and file uploads. Use a VPS, Render, Railway, Fly.io, or another backend-capable host, then set `BASE_URL` to the HTTPS deployment URL.

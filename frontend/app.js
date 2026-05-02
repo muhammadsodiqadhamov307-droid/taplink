@@ -50,9 +50,10 @@ function renderShell() {
     document.getElementById("chatSubtitle").textContent = "Chap tomondan chatni oching";
     document.getElementById("messages").innerHTML = "<div class=\"empty-state\">Chat tanlanmagan</div>";
   } else {
-    document.getElementById("chatTitle").textContent = "Dr. Farangisxon Yusufjonova";
-    document.getElementById("chatSubtitle").textContent = "Online maslahat";
-    loadMyMessages();
+    document.getElementById("chatTitle").textContent = "Mini App faqat shifokor uchun";
+    document.getElementById("chatSubtitle").textContent = "Savollarni Telegram botga yuboring";
+    document.getElementById("messages").innerHTML = "<div class=\"empty-state\">Iltimos, suhbatni bot orqali davom ettiring.</div>";
+    document.getElementById("messageForm").classList.add("hidden");
   }
 }
 
@@ -121,7 +122,7 @@ async function loadAdminUsers(users) {
 async function selectAdminUser(user) {
   state.selectedUserId = user.telegram_id;
   document.getElementById("chatTitle").textContent = `${user.first_name}, ${user.age}`;
-  document.getElementById("chatSubtitle").textContent = `Telegram ID: ${user.telegram_id}`;
+  document.getElementById("chatSubtitle").textContent = "Bot orqali kelgan xabarlar";
   state.messages = await api(`/api/admin/users/${user.telegram_id}/messages`);
   renderMessages(state.messages);
   state.socket.emit("messages:read", { userId: user.telegram_id });
