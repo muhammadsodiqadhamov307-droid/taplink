@@ -10,6 +10,7 @@ import {
   Plus,
   Search,
   Send,
+  StopCircle,
   Video as VideoIcon,
 } from "lucide-react";
 
@@ -170,10 +171,15 @@ export default function App() {
   const [inputValue, setInputValue] = useState("");
   const [screen, setScreen] = useState<"list" | "chat">("list");
   const [error, setError] = useState("");
+  const [mediaMode, setMediaMode] = useState<"audio" | "video">("audio");
+  const [recordingMode, setRecordingMode] = useState<"audio" | "video" | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const selectedUserRef = useRef<ChatUser | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
 
   useEffect(() => {
     selectedUserRef.current = selectedUser;
@@ -185,6 +191,14 @@ export default function App() {
 
   useEffect(() => {
     boot();
+
+    return () => {
+      if (recorderRef.current && recorderRef.current.state !== "inactive") {
+        recorderRef.current.stop();
+      }
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      socketRef.current?.disconnect();
+    };
   }, []);
 
   async function boot() {
@@ -285,6 +299,10 @@ export default function App() {
   }
 
   async function sendFileMessage(file: File) {
+    if (!selectedUser) {
+      return;
+    }
+
     const form = new FormData();
     form.append("file", file);
     const uploaded = await api<Partial<Message>>("/api/uploads", {
@@ -293,6 +311,77 @@ export default function App() {
       body: form,
     });
     sendSocketMessage(uploaded);
+  }
+
+  function recordingMimeType(mode: "audio" | "video") {
+    const options = mode === "audio"
+      ? ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"]
+      : ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
+
+    return options.find((mimeType) => MediaRecorder.isTypeSupported(mimeType)) || "";
+  }
+
+  async function startRecording(mode: "audio" | "video") {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      alert("Brauzer ovoz/video yozishni qo'llab-quvvatlamaydi.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(
+        mode === "audio"
+          ? { audio: true }
+          : { audio: true, video: { facingMode: "user" } },
+      );
+      const mimeType = recordingMimeType(mode);
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      chunksRef.current = [];
+      streamRef.current = stream;
+      recorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || (mode === "audio" ? "audio/webm" : "video/webm") });
+        const extension = mode === "audio" ? "webm" : "webm";
+        const file = new File([blob], `doctor-${mode}-${Date.now()}.${extension}`, { type: blob.type });
+        stream.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+        recorderRef.current = null;
+        chunksRef.current = [];
+        setRecordingMode(null);
+
+        if (blob.size > 0) {
+          await sendFileMessage(file);
+        }
+      };
+
+      recorder.start();
+      setRecordingMode(mode);
+      setMediaMode(mode === "audio" ? "video" : "audio");
+    } catch (err) {
+      setRecordingMode(null);
+      alert(err instanceof Error ? err.message : "Ovoz/video yozib bo'lmadi.");
+    }
+  }
+
+  function stopRecording() {
+    if (recorderRef.current && recorderRef.current.state !== "inactive") {
+      recorderRef.current.stop();
+    }
+  }
+
+  function handleMediaButton() {
+    if (recordingMode) {
+      stopRecording();
+      return;
+    }
+
+    startRecording(mediaMode);
   }
 
   if (error) {
@@ -415,10 +504,24 @@ export default function App() {
               <input
                 value={inputValue}
                 onChange={(event) => setInputValue(event.target.value)}
-                placeholder="Xabar yozing..."
+                placeholder={recordingMode ? `${recordingMode === "audio" ? "Ovoz" : "Video"} yozilmoqda...` : "Xabar yozing..."}
+                disabled={Boolean(recordingMode)}
               />
-              <button className="send-button" type="submit">
-                {inputValue.trim() ? <Send className="h-5 w-5" /> : <Mic className="h-6 w-6" />}
+              <button
+                className={`send-button ${recordingMode ? "recording" : ""}`}
+                type={inputValue.trim() && !recordingMode ? "submit" : "button"}
+                onClick={inputValue.trim() || recordingMode ? (recordingMode ? stopRecording : undefined) : handleMediaButton}
+                title={recordingMode ? "Yuborish" : mediaMode === "audio" ? "Ovoz yozish" : "Video yozish"}
+              >
+                {recordingMode ? (
+                  <StopCircle className="h-6 w-6" />
+                ) : inputValue.trim() ? (
+                  <Send className="h-5 w-5" />
+                ) : mediaMode === "audio" ? (
+                  <Mic className="h-6 w-6" />
+                ) : (
+                  <VideoIcon className="h-6 w-6" />
+                )}
               </button>
             </form>
           </motion.section>
