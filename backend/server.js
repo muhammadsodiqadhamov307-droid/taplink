@@ -284,25 +284,53 @@ function absoluteUrl(url) {
     : `${BASE_URL}${url}`;
 }
 
+async function telegramApi(method, payload) {
+  const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Telegram ${method} failed: ${await response.text()}`);
+  }
+}
+
 async function sendTelegramMessage(chatId, message) {
+  const doctorText = `👩‍⚕️ Dr. Farangisxon Yusufjonova:${message.content ? `\n\n${message.content}` : ""}`;
+
+  if (message.file_url) {
+    const mediaUrl = absoluteUrl(message.file_url);
+    const mediaMethods = {
+      image: ["sendPhoto", "photo"],
+      video: ["sendVideo", "video"],
+      audio: ["sendAudio", "audio"],
+      file: ["sendDocument", "document"],
+    };
+    const [method, field] = mediaMethods[message.type] || mediaMethods.file;
+
+    try {
+      await telegramApi(method, {
+        chat_id: chatId,
+        [field]: mediaUrl,
+        caption: doctorText,
+      });
+      return;
+    } catch (error) {
+      console.warn("Could not send Telegram media directly, falling back to text link:", error.message);
+    }
+  }
+
   const fileLine = message.file_url ? `\n\n${absoluteUrl(message.file_url)}` : "";
   const text = message.type === "text"
     ? message.content
     : `${message.content || message.file_name || "Fayl"}${fileLine}`;
 
-  const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text: `👩‍⚕️ Dr. Farangisxon Yusufjonova:\n\n${text}`,
-      disable_web_page_preview: false,
-    }),
+  await telegramApi("sendMessage", {
+    chat_id: chatId,
+    text: `👩‍⚕️ Dr. Farangisxon Yusufjonova:\n\n${text}`,
+    disable_web_page_preview: false,
   });
-
-  if (!response.ok) {
-    throw new Error(`Telegram sendMessage failed: ${await response.text()}`);
-  }
 }
 
 async function getAdminUsers() {
