@@ -6,7 +6,16 @@ from pathlib import Path
 from urllib import request
 
 from dotenv import load_dotenv
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MenuButtonDefault, MenuButtonWebApp, Update, WebAppInfo
+from telegram import (
+    BotCommandScopeChat,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    MenuButtonCommands,
+    MenuButtonWebApp,
+    ReplyKeyboardRemove,
+    Update,
+    WebAppInfo,
+)
 from telegram.ext import Application, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 
 
@@ -192,6 +201,20 @@ def is_admin(update: Update) -> bool:
     return str(update.effective_user.id) in ADMIN_TELEGRAM_IDS
 
 
+async def clear_user_bot_controls(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> None:
+    """Remove persistent bot controls that regular users should not see."""
+    await context.bot.set_chat_menu_button(
+        chat_id=chat_id,
+        menu_button=MenuButtonCommands(),
+    )
+    await context.bot.set_my_commands([], scope=BotCommandScopeChat(chat_id=chat_id))
+
+
+async def reply_without_keyboard(update: Update, text: str) -> None:
+    """Send a regular-user reply while clearing old reply keyboard buttons."""
+    await update.message.reply_text(text, reply_markup=ReplyKeyboardRemove())
+
+
 async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Send the admin-only Mini App button."""
     context.user_data.clear()
@@ -218,20 +241,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if is_admin(update):
         return await admin_start(update, context)
 
-    await context.bot.set_chat_menu_button(
-        chat_id=update.effective_chat.id,
-        menu_button=MenuButtonDefault(),
-    )
+    await clear_user_bot_controls(context, update.effective_chat.id)
     context.user_data.clear()
     profile = get_user(update.effective_user.id)
 
     if profile:
         context.user_data["first_name"] = profile["first_name"]
         context.user_data["age"] = profile["age"]
-        await update.message.reply_text("Savolingizni yozing. Shifokorga yuboramiz:")
+        await reply_without_keyboard(update, "Savolingizni yozing. Shifokorga yuboramiz:")
         return QUESTION
 
-    await update.message.reply_text("Assalomu alaykum! Iltimos, ismingizni yozing:")
+    await reply_without_keyboard(update, "Assalomu alaykum! Iltimos, ismingizni yozing:")
     return FIRST_NAME
 
 
@@ -241,14 +261,11 @@ async def route_incoming_user_message(update: Update, context: ContextTypes.DEFA
         await update.message.reply_text("Xabarlarni Mini App admin panelidan boshqaring.")
         return ConversationHandler.END
 
-    await context.bot.set_chat_menu_button(
-        chat_id=update.effective_chat.id,
-        menu_button=MenuButtonDefault(),
-    )
+    await clear_user_bot_controls(context, update.effective_chat.id)
     if get_user(update.effective_user.id):
         return await receive_question(update, context)
 
-    await update.message.reply_text("Avval ro'yxatdan o'tish uchun /start bosing.")
+    await reply_without_keyboard(update, "Avval ro'yxatdan o'tish uchun /start bosing.")
     return ConversationHandler.END
 
 
@@ -256,11 +273,11 @@ async def receive_first_name(update: Update, context: ContextTypes.DEFAULT_TYPE)
     """Save first name and ask for age."""
     first_name = update.message.text.strip()
     if not first_name:
-        await update.message.reply_text("Iltimos, ismingizni matn ko'rinishida yozing:")
+        await reply_without_keyboard(update, "Iltimos, ismingizni matn ko'rinishida yozing:")
         return FIRST_NAME
 
     context.user_data["first_name"] = first_name
-    await update.message.reply_text("Yoshingizni yozing:")
+    await reply_without_keyboard(update, "Yoshingizni yozing:")
     return AGE
 
 
@@ -268,16 +285,13 @@ async def receive_age(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     """Save age and ask the user to send their first question."""
     age = update.message.text.strip()
     if not age:
-        await update.message.reply_text("Iltimos, yoshingizni matn ko'rinishida yozing:")
+        await reply_without_keyboard(update, "Iltimos, yoshingizni matn ko'rinishida yozing:")
         return AGE
 
     context.user_data["age"] = age
     save_user(update.effective_user.id, context.user_data["first_name"], age)
-    await context.bot.set_chat_menu_button(
-        chat_id=update.effective_chat.id,
-        menu_button=MenuButtonDefault(),
-    )
-    await update.message.reply_text("Ma'lumotlaringiz saqlandi. Endi savolingizni yozing:")
+    await clear_user_bot_controls(context, update.effective_chat.id)
+    await reply_without_keyboard(update, "Ma'lumotlaringiz saqlandi. Endi savolingizni yozing:")
     return QUESTION
 
 
@@ -324,7 +338,7 @@ async def receive_question(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     profile = get_user(update.effective_user.id)
 
     if not profile and "first_name" not in context.user_data:
-        await update.message.reply_text("Avval /start bosing va ism/yoshingizni yozing.")
+        await reply_without_keyboard(update, "Avval /start bosing va ism/yoshingizni yozing.")
         return ConversationHandler.END
 
     if profile:
@@ -335,7 +349,7 @@ async def receive_question(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     content = (update.message.text or update.message.caption or "").strip()
 
     if not content and not file_url:
-        await update.message.reply_text("Iltimos, savolingizni matn, ovoz, rasm, video yoki fayl ko'rinishida yuboring.")
+        await reply_without_keyboard(update, "Iltimos, savolingizni matn, ovoz, rasm, video yoki fayl ko'rinishida yuboring.")
         return QUESTION
 
     message_id = save_message(
@@ -346,13 +360,13 @@ async def receive_question(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         file_name,
     )
     await asyncio.to_thread(notify_backend, message_id)
-    await update.message.reply_text("✅ Xabaringiz shifokorga yuborildi. Javobni shu bot orqali olasiz.")
+    await reply_without_keyboard(update, "✅ Xabaringiz shifokorga yuborildi. Javobni shu bot orqali olasiz.")
     return ConversationHandler.END
 
 
 async def ask_current_step_again(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle unexpected non-text input during onboarding."""
-    await update.message.reply_text("Iltimos, javobni matn ko'rinishida yozing.")
+    await reply_without_keyboard(update, "Iltimos, javobni matn ko'rinishida yozing.")
     return FIRST_NAME if "first_name" not in context.user_data else AGE
 
 

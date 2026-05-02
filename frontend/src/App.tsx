@@ -10,6 +10,7 @@ import {
   Search,
   Send,
   StopCircle,
+  X,
 } from "lucide-react";
 
 declare global {
@@ -136,9 +137,26 @@ function Avatar({ user }: { user: ChatUser }) {
   );
 }
 
-function MessageBody({ message }: { message: Message }) {
+function RecordingWave() {
+  return (
+    <div className="recording-wave" aria-label="Ovoz yozilmoqda">
+      <span>Ovoz yozilmoqda</span>
+      <div className="wave-bars">
+        {Array.from({ length: 24 }).map((_, index) => (
+          <i key={index} style={{ animationDelay: `${index * 0.055}s` }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MessageBody({ message, onOpenImage }: { message: Message; onOpenImage: (src: string) => void }) {
   if (message.type === "image" && message.file_url) {
-    return <img className="media-preview" src={message.file_url} alt={message.file_name || "Rasm"} />;
+    return (
+      <button className="image-preview-button" type="button" onClick={() => onOpenImage(message.file_url!)}>
+        <img className="media-preview" src={message.file_url} alt={message.file_name || "Rasm"} />
+      </button>
+    );
   }
 
   if (message.type === "video" && message.file_url) {
@@ -170,6 +188,7 @@ export default function App() {
   const [screen, setScreen] = useState<"list" | "chat">("list");
   const [error, setError] = useState("");
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+  const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const selectedUserRef = useRef<ChatUser | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -465,7 +484,7 @@ export default function App() {
                 const outgoing = message.sender_id === me.telegramId;
                 return (
                   <article key={message.id} className={`message ${outgoing ? "outgoing" : "incoming"}`}>
-                    <MessageBody message={message} />
+                    <MessageBody message={message} onOpenImage={setFullScreenImage} />
                     <div className="message-meta">
                       <span>{formatTime(message.timestamp)}</span>
                       {outgoing && <CheckCheck className="h-3.5 w-3.5" />}
@@ -490,12 +509,15 @@ export default function App() {
               <button className="attach-button" type="button" onClick={() => fileInputRef.current?.click()}>
                 <Plus className="h-6 w-6" />
               </button>
-              <input
-                value={inputValue}
-                onChange={(event) => setInputValue(event.target.value)}
-                placeholder={isRecordingAudio ? "Ovoz yozilmoqda..." : "Xabar yozing..."}
-                disabled={isRecordingAudio}
-              />
+              {isRecordingAudio ? (
+                <RecordingWave />
+              ) : (
+                <input
+                  value={inputValue}
+                  onChange={(event) => setInputValue(event.target.value)}
+                  placeholder="Xabar yozing..."
+                />
+              )}
               <button
                 className={`send-button ${isRecordingAudio ? "recording" : ""}`}
                 type={inputValue.trim() && !isRecordingAudio ? "submit" : "button"}
@@ -512,6 +534,23 @@ export default function App() {
               </button>
             </form>
           </motion.section>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {fullScreenImage && (
+          <motion.div
+            className="image-lightbox"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setFullScreenImage(null)}
+          >
+            <button className="lightbox-close" type="button" aria-label="Yopish" onClick={() => setFullScreenImage(null)}>
+              <X className="h-6 w-6" />
+            </button>
+            <img src={fullScreenImage} alt="Rasm" onClick={(event) => event.stopPropagation()} />
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

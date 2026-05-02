@@ -317,6 +317,14 @@ input {
   display: block;
 }
 
+.image-preview-button {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
 .audio-preview {
   width: min(260px, 72vw);
   display: block;
@@ -387,4 +395,87 @@ input {
 .composer input:disabled {
   opacity: 1;
   color: var(--accent-strong);
+}
+
+.recording-wave {
+  height: 44px;
+  min-width: 0;
+  border: 1px solid var(--divider);
+  border-radius: 17px;
+  background: #fff8fb;
+  color: var(--accent-strong);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 13px;
+  overflow: hidden;
+}
+
+.recording-wave span {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.wave-bars {
+  min-width: 0;
+  flex: 1;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.wave-bars i {
+  width: 2px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  animation: voice-wave 0.9s ease-in-out infinite;
+}
+
+@keyframes voice-wave {
+  0%,
+  100% {
+    height: 6px;
+    opacity: 0.45;
+  }
+
+  50% {
+    height: 24px;
+    opacity: 1;
+  }
+}
+
+.image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(32, 13, 23, 0.92);
+}
+
+.image-lightbox img {
+  max-width: 100%;
+  max-height: 88dvh;
+  border-radius: 10px;
+  object-fit: contain;
+}
+
+.lightbox-close {
+  position: fixed;
+  top: max(14px, env(safe-area-inset-top));
+  right: 14px;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  color: white;
+  display: grid;
+  place-items: center;
 }
