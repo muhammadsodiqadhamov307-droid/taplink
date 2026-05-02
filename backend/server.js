@@ -1,17 +1,22 @@
 import crypto from "node:crypto";
+import { execFile as execFileCallback } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 import dotenv from "dotenv";
 import express from "express";
+import ffmpegPath from "ffmpeg-static";
 import multer from "multer";
 import { Server } from "socket.io";
 import sqlite3 from "sqlite3";
 import { open } from "sqlite";
 
 dotenv.config();
+
+const execFile = promisify(execFileCallback);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -284,6 +289,33 @@ function absoluteUrl(url) {
     : `${BASE_URL}${url}`;
 }
 
+async function convertAudioToTelegramVoice(file) {
+  const outputName = `${path.parse(file.filename).name}.ogg`;
+  const outputPath = path.join(uploadsDir, outputName);
+  const ffmpegBinary = ffmpegPath || "ffmpeg";
+
+  await execFile(ffmpegBinary, [
+    "-y",
+    "-i",
+    file.path,
+    "-vn",
+    "-c:a",
+    "libopus",
+    "-b:a",
+    "32k",
+    "-ar",
+    "48000",
+    outputPath,
+  ]);
+
+  fs.rm(file.path, { force: true }, () => {});
+
+  return {
+    fileUrl: `/uploads/${outputName}`,
+    fileName: `${path.parse(file.originalname).name || "voice"}.ogg`,
+  };
+}
+
 async function telegramApi(method, payload) {
   const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
     method: "POST",
@@ -304,7 +336,7 @@ async function sendTelegramMessage(chatId, message) {
     const mediaMethods = {
       image: ["sendPhoto", "photo"],
       video: ["sendVideo", "video"],
-      audio: ["sendAudio", "audio"],
+      audio: ["sendVoice", "voice"],
       file: ["sendDocument", "document"],
     };
     const [method, field] = mediaMethods[message.type] || mediaMethods.file;
@@ -441,6 +473,8 @@ app.post("/api/uploads", requireTelegramUser, upload.single("file"), async (req,
   }
 
   const mime = req.file.mimetype || "";
+  let fileUrl = `/uploads/${req.file.filename}`;
+  let fileName = req.file.originalname;
   const type = mime.startsWith("image/")
     ? "image"
     : mime.startsWith("video/")
@@ -449,10 +483,20 @@ app.post("/api/uploads", requireTelegramUser, upload.single("file"), async (req,
         ? "audio"
         : "file";
 
+  if (type === "audio") {
+    try {
+      const converted = await convertAudioToTelegramVoice(req.file);
+      fileUrl = converted.fileUrl;
+      fileName = converted.fileName;
+    } catch (error) {
+      console.warn("Could not convert audio to Telegram voice format:", error.message);
+    }
+  }
+
   res.json({
     type,
-    fileUrl: `/uploads/${req.file.filename}`,
-    fileName: req.file.originalname,
+    fileUrl,
+    fileName,
   });
 });
 
