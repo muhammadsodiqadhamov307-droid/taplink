@@ -25,7 +25,7 @@ declare global {
   }
 }
 
-type MessageType = "text" | "image" | "video" | "file";
+type MessageType = "text" | "image" | "video" | "audio" | "file";
 
 interface CurrentUser {
   telegramId: string;
@@ -68,7 +68,16 @@ function formatTime(value?: string | null) {
     return "";
   }
 
-  return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const normalized = /[zZ]|[+-]\d\d:?\d\d$/.test(value)
+    ? value
+    : `${value.replace(" ", "T")}Z`;
+
+  return new Date(normalized).toLocaleTimeString("uz-UZ", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Tashkent",
+  });
 }
 
 function initials(name: string) {
@@ -87,8 +96,21 @@ function previewFor(user: ChatUser) {
 
   if (user.last_type === "image") return "Rasm";
   if (user.last_type === "video") return "Video";
+  if (user.last_type === "audio") return "Ovozli xabar";
   if (user.last_type === "file") return "Fayl";
   return "Bot orqali kelgan xabarlar";
+}
+
+function uniqueUsers(users: ChatUser[]) {
+  const seen = new Set<string>();
+  return users.filter((user) => {
+    if (seen.has(user.telegram_id)) {
+      return false;
+    }
+
+    seen.add(user.telegram_id);
+    return true;
+  });
 }
 
 async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -122,6 +144,10 @@ function MessageBody({ message }: { message: Message }) {
 
   if (message.type === "video" && message.file_url) {
     return <video className="media-preview" src={message.file_url} controls />;
+  }
+
+  if (message.type === "audio" && message.file_url) {
+    return <audio className="audio-preview" src={message.file_url} controls />;
   }
 
   if (message.type === "file" && message.file_url) {
@@ -203,16 +229,17 @@ export default function App() {
     });
 
     socket.on("admin:users", (updatedUsers: ChatUser[]) => {
-      setUsers(updatedUsers);
+      const dedupedUsers = uniqueUsers(updatedUsers);
+      setUsers(dedupedUsers);
       setSelectedUser((current) => {
         if (!current) return current;
-        return updatedUsers.find((user) => user.telegram_id === current.telegram_id) || current;
+        return dedupedUsers.find((user) => user.telegram_id === current.telegram_id) || current;
       });
     });
   }
 
   async function refreshUsers() {
-    const nextUsers = await api<ChatUser[]>("/api/admin/users");
+    const nextUsers = uniqueUsers(await api<ChatUser[]>("/api/admin/users"));
     setUsers(nextUsers);
     return nextUsers;
   }

@@ -71,12 +71,45 @@ def init_db() -> None:
                 sender_id TEXT NOT NULL,
                 receiver_id TEXT NOT NULL,
                 content TEXT,
-                type TEXT NOT NULL CHECK(type IN ('text', 'image', 'video', 'file')),
+                type TEXT NOT NULL CHECK(type IN ('text', 'image', 'video', 'audio', 'file')),
                 file_url TEXT,
                 file_name TEXT,
                 timestamp TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 is_read INTEGER NOT NULL DEFAULT 0
             )
+            """
+        )
+        table = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'messages'"
+        ).fetchone()
+        if table and "'audio'" not in table[0]:
+            conn.executescript(
+                """
+                ALTER TABLE messages RENAME TO messages_old;
+
+                CREATE TABLE messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sender_id TEXT NOT NULL,
+                    receiver_id TEXT NOT NULL,
+                    content TEXT,
+                    type TEXT NOT NULL CHECK(type IN ('text', 'image', 'video', 'audio', 'file')),
+                    file_url TEXT,
+                    file_name TEXT,
+                    timestamp TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    is_read INTEGER NOT NULL DEFAULT 0
+                );
+
+                INSERT INTO messages (id, sender_id, receiver_id, content, type, file_url, file_name, timestamp, is_read)
+                SELECT id, sender_id, receiver_id, content, type, file_url, file_name, timestamp, is_read
+                FROM messages_old;
+
+                DROP TABLE messages_old;
+                """
+            )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_messages_pair_time
+            ON messages(sender_id, receiver_id, timestamp)
             """
         )
         conn.commit()
@@ -263,6 +296,14 @@ async def save_telegram_attachment(update: Update, context: ContextTypes.DEFAULT
         attachment = message.video
         message_type = "video"
         file_name = message.video.file_name or f"video-{message.message_id}.mp4"
+    elif message.voice:
+        attachment = message.voice
+        message_type = "audio"
+        file_name = f"voice-{message.message_id}.ogg"
+    elif message.audio:
+        attachment = message.audio
+        message_type = "audio"
+        file_name = message.audio.file_name or f"audio-{message.message_id}.mp3"
     elif message.document:
         attachment = message.document
         file_name = message.document.file_name or f"file-{message.message_id}"
@@ -294,7 +335,7 @@ async def receive_question(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     content = (update.message.text or update.message.caption or "").strip()
 
     if not content and not file_url:
-        await update.message.reply_text("Iltimos, savolingizni matn, rasm, video yoki fayl ko'rinishida yuboring.")
+        await update.message.reply_text("Iltimos, savolingizni matn, ovoz, rasm, video yoki fayl ko'rinishida yuboring.")
         return QUESTION
 
     message_id = save_message(
@@ -329,7 +370,7 @@ def main() -> None:
         entry_points=[
             CommandHandler("start", start),
             MessageHandler(
-                filters.TEXT | filters.PHOTO | filters.VIDEO | filters.Document.ALL,
+                filters.TEXT | filters.PHOTO | filters.VIDEO | filters.VOICE | filters.AUDIO | filters.Document.ALL,
                 route_incoming_user_message,
             ),
         ],
@@ -346,7 +387,7 @@ def main() -> None:
             ],
             QUESTION: [
                 CommandHandler("start", start),
-                MessageHandler(filters.TEXT | filters.PHOTO | filters.VIDEO | filters.Document.ALL, receive_question),
+                MessageHandler(filters.TEXT | filters.PHOTO | filters.VIDEO | filters.VOICE | filters.AUDIO | filters.Document.ALL, receive_question),
                 MessageHandler(filters.ALL, receive_question),
             ],
         },

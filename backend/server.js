@@ -72,7 +72,7 @@ await db.exec(`
     sender_id TEXT NOT NULL,
     receiver_id TEXT NOT NULL,
     content TEXT,
-    type TEXT NOT NULL CHECK(type IN ('text', 'image', 'video', 'file')),
+    type TEXT NOT NULL CHECK(type IN ('text', 'image', 'video', 'audio', 'file')),
     file_url TEXT,
     file_name TEXT,
     timestamp TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -82,6 +82,45 @@ await db.exec(`
   CREATE INDEX IF NOT EXISTS idx_messages_pair_time
     ON messages(sender_id, receiver_id, timestamp);
 `);
+
+async function ensureAudioMessageType() {
+  const table = await db.get("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'messages'");
+
+  if (!table?.sql || table.sql.includes("'audio'")) {
+    return;
+  }
+
+  await db.exec(`
+    BEGIN TRANSACTION;
+
+    ALTER TABLE messages RENAME TO messages_old;
+
+    CREATE TABLE messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sender_id TEXT NOT NULL,
+      receiver_id TEXT NOT NULL,
+      content TEXT,
+      type TEXT NOT NULL CHECK(type IN ('text', 'image', 'video', 'audio', 'file')),
+      file_url TEXT,
+      file_name TEXT,
+      timestamp TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      is_read INTEGER NOT NULL DEFAULT 0
+    );
+
+    INSERT INTO messages (id, sender_id, receiver_id, content, type, file_url, file_name, timestamp, is_read)
+    SELECT id, sender_id, receiver_id, content, type, file_url, file_name, timestamp, is_read
+    FROM messages_old;
+
+    DROP TABLE messages_old;
+
+    CREATE INDEX IF NOT EXISTS idx_messages_pair_time
+      ON messages(sender_id, receiver_id, timestamp);
+
+    COMMIT;
+  `);
+}
+
+await ensureAudioMessageType();
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -267,6 +306,9 @@ async function sendTelegramMessage(chatId, message) {
 }
 
 async function getAdminUsers() {
+  const adminIds = [...ADMIN_TELEGRAM_IDS];
+  const adminPlaceholders = adminIds.map(() => "?").join(", ");
+
   return db.all(`
     SELECT
       u.telegram_id,
@@ -301,11 +343,13 @@ async function getAdminUsers() {
       WHERE receiver_id = ? AND is_read = 0
       GROUP BY sender_id
     ) unread ON unread.user_id = u.telegram_id
+    WHERE u.telegram_id NOT IN (${adminPlaceholders})
+    GROUP BY u.telegram_id
     ORDER BY
       CASE WHEN last_message.timestamp IS NULL THEN 1 ELSE 0 END,
       datetime(last_message.timestamp) DESC,
       datetime(u.updated_at) DESC
-  `, ADMIN_TELEGRAM_ID, ADMIN_TELEGRAM_ID, ADMIN_TELEGRAM_ID, ADMIN_TELEGRAM_ID);
+  `, ADMIN_TELEGRAM_ID, ADMIN_TELEGRAM_ID, ADMIN_TELEGRAM_ID, ADMIN_TELEGRAM_ID, ...adminIds);
 }
 
 const app = express();
@@ -373,7 +417,9 @@ app.post("/api/uploads", requireTelegramUser, upload.single("file"), async (req,
     ? "image"
     : mime.startsWith("video/")
       ? "video"
-      : "file";
+      : mime.startsWith("audio/")
+        ? "audio"
+        : "file";
 
   res.json({
     type,
