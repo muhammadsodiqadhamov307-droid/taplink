@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dr. Farangisxon Chat</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main id="app" class="app-shell">
+    <section class="loading-view">
+      <div class="loader"></div>
+      <p>Chat yuklanmoqda...</p>
+    </section>
+  </main>
+
+  <template id="chat-template">
+    <section class="chat-layout">
+      <aside id="userListPanel" class="user-list-panel hidden">
+        <header class="panel-header">
+          <h1>Chatlar</h1>
+          <span id="chatCount">0</span>
+        </header>
+        <div id="userList" class="user-list"></div>
+      </aside>
+
+      <section class="chat-panel">
+        <header class="chat-header">
+          <div>
+            <h2 id="chatTitle">Dr. Farangisxon Yusufjonova</h2>
+            <p id="chatSubtitle">Online maslahat</p>
+          </div>
+        </header>
+
+        <div id="messages" class="messages"></div>
+
+        <form id="messageForm" class="composer">
+          <input id="fileInput" type="file" hidden>
+          <button id="attachButton" class="icon-button" type="button" title="Fayl biriktirish">+</button>
+          <textarea id="messageInput" rows="1" placeholder="Xabar yozing..."></textarea>
+          <button class="send-button" type="submit">Yuborish</button>
+        </form>
+      </section>
+    </section>
+  </template>
+
+  <script src="./app.js" type="module"></script>
+</body>
+</html>

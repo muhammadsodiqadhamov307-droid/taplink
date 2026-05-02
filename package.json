@@ -1,12 +1,12 @@
 {
-  "name": "react-example",
+  "name": "dr-farangisxon-mini-app",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port=3000 --host=0.0.0.0",
-    "build": "vite build",
-    "preview": "vite preview",
+    "dev": "node backend/server.js",
+    "bot": "python bot.py",
+    "start": "node backend/server.js",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
   },
@@ -18,9 +18,13 @@
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "vite": "^6.2.3",
-    "express": "^4.21.2",
     "dotenv": "^17.2.3",
-    "motion": "^12.23.24"
+    "express": "^4.21.2",
+    "multer": "^2.0.2",
+    "motion": "^12.23.24",
+    "socket.io": "^4.8.1",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.7"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
