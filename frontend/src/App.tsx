@@ -466,7 +466,6 @@ export default function App() {
             <header className="app-header">
               <h1>Chatlar</h1>
               <div className="header-actions">
-                <Search className="h-5 w-5" />
                 <span className="count-pill">{filteredUsers.length}</span>
               </div>
             </header>
