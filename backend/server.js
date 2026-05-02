@@ -80,6 +80,7 @@ await db.exec(`
     type TEXT NOT NULL CHECK(type IN ('text', 'image', 'video', 'audio', 'file')),
     file_url TEXT,
     file_name TEXT,
+    telegram_message_id TEXT,
     timestamp TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     is_read INTEGER NOT NULL DEFAULT 0
   );
@@ -126,6 +127,17 @@ async function ensureAudioMessageType() {
 }
 
 await ensureAudioMessageType();
+
+async function ensureTelegramMessageIdColumn() {
+  const columns = await db.all("PRAGMA table_info(messages)");
+  if (columns.some((column) => column.name === "telegram_message_id")) {
+    return;
+  }
+
+  await db.exec("ALTER TABLE messages ADD COLUMN telegram_message_id TEXT");
+}
+
+await ensureTelegramMessageIdColumn();
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -234,7 +246,7 @@ async function getUserById(telegramId) {
 async function getMessagesForUser(userId) {
   return db.all(
     `
-      SELECT id, sender_id, receiver_id, content, type, file_url, file_name, timestamp, is_read
+      SELECT id, sender_id, receiver_id, content, type, file_url, file_name, telegram_message_id, timestamp, is_read
       FROM messages
       WHERE sender_id = ? OR receiver_id = ?
       ORDER BY datetime(timestamp) ASC, id ASC
@@ -260,7 +272,7 @@ async function createMessage({ senderId, receiverId, content, type, fileUrl, fil
 
   return db.get(
     `
-      SELECT id, sender_id, receiver_id, content, type, file_url, file_name, timestamp, is_read
+      SELECT id, sender_id, receiver_id, content, type, file_url, file_name, telegram_message_id, timestamp, is_read
       FROM messages
       WHERE id = ?
     `,
@@ -271,12 +283,24 @@ async function createMessage({ senderId, receiverId, content, type, fileUrl, fil
 async function getMessageById(id) {
   return db.get(
     `
-      SELECT id, sender_id, receiver_id, content, type, file_url, file_name, timestamp, is_read
+      SELECT id, sender_id, receiver_id, content, type, file_url, file_name, telegram_message_id, timestamp, is_read
       FROM messages
       WHERE id = ?
     `,
     id,
   );
+}
+
+async function setTelegramMessageId(id, telegramMessageId) {
+  await db.run(
+    "UPDATE messages SET telegram_message_id = ? WHERE id = ?",
+    telegramMessageId ? String(telegramMessageId) : null,
+    id,
+  );
+}
+
+async function deleteMessageById(id) {
+  await db.run("DELETE FROM messages WHERE id = ?", id);
 }
 
 function absoluteUrl(url) {
@@ -326,6 +350,8 @@ async function telegramApi(method, payload) {
   if (!response.ok) {
     throw new Error(`Telegram ${method} failed: ${await response.text()}`);
   }
+
+  return response.json();
 }
 
 async function sendTelegramMessage(chatId, message) {
@@ -342,12 +368,12 @@ async function sendTelegramMessage(chatId, message) {
     const [method, field] = mediaMethods[message.type] || mediaMethods.file;
 
     try {
-      await telegramApi(method, {
+      const sent = await telegramApi(method, {
         chat_id: chatId,
         [field]: mediaUrl,
         caption: doctorText,
       });
-      return;
+      return sent?.result?.message_id || null;
     } catch (error) {
       console.warn("Could not send Telegram media directly, falling back to text link:", error.message);
     }
@@ -358,11 +384,12 @@ async function sendTelegramMessage(chatId, message) {
     ? message.content
     : `${message.content || message.file_name || "Fayl"}${fileLine}`;
 
-  await telegramApi("sendMessage", {
+  const sent = await telegramApi("sendMessage", {
     chat_id: chatId,
     text: `👩‍⚕️ Dr. Farangisxon Yusufjonova:\n\n${text}`,
     disable_web_page_preview: false,
   });
+  return sent?.result?.message_id || null;
 }
 
 async function getAdminUsers() {
@@ -568,13 +595,59 @@ io.on("connection", async (socket) => {
       });
 
       if (isAdmin) {
-        await sendTelegramMessage(receiverId, message);
+        const telegramMessageId = await sendTelegramMessage(receiverId, message);
+        if (telegramMessageId) {
+          await setTelegramMessageId(message.id, telegramMessageId);
+          message.telegram_message_id = String(telegramMessageId);
+        }
       }
 
       io.to(`user:${message.sender_id}`).emit("message:new", message);
       io.to(`user:${message.receiver_id}`).emit("message:new", message);
       io.to("admin").emit("admin:users", await getAdminUsers());
       ack?.({ ok: true, message });
+    } catch (error) {
+      ack?.({ ok: false, error: error.message });
+    }
+  });
+
+  socket.on("message:delete", async ({ messageId } = {}, ack) => {
+    try {
+      if (!user.isAdmin) {
+        throw new Error("Admin only");
+      }
+
+      const message = await getMessageById(messageId);
+      if (!message) {
+        ack?.({ ok: true });
+        return;
+      }
+
+      if (!ADMIN_TELEGRAM_IDS.has(String(message.sender_id))) {
+        throw new Error("Only doctor messages can be deleted");
+      }
+
+      let telegramDeleteWarning = "";
+      if (message.telegram_message_id) {
+        try {
+          await telegramApi("deleteMessage", {
+            chat_id: message.receiver_id,
+            message_id: Number(message.telegram_message_id),
+          });
+        } catch (error) {
+          telegramDeleteWarning = "Telegramdagi xabar o'chmadi, faqat admin paneldan o'chirildi.";
+          console.warn("Could not delete Telegram message:", error.message);
+        }
+      } else {
+        telegramDeleteWarning = "Bu eski xabar uchun Telegram message ID saqlanmagan, faqat admin paneldan o'chirildi.";
+      }
+
+      await deleteMessageById(message.id);
+      io.to(`user:${message.sender_id}`).emit("message:deleted", { id: message.id });
+      io.to(`user:${message.receiver_id}`).emit("message:deleted", { id: message.id });
+      io.to("admin").emit("message:deleted", { id: message.id });
+      io.to("admin").emit("admin:users", await getAdminUsers());
+      ack?.({ ok: true, warning: telegramDeleteWarning });
     } catch (error) {
       ack?.({ ok: false, error: error.message });
     }

@@ -130,6 +130,37 @@ input {
   background: var(--panel);
 }
 
+.search-box {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--divider);
+  background: var(--panel);
+  color: var(--muted);
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-box input {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  border: 1px solid var(--divider);
+  border-radius: 14px;
+  background: #fff8fb;
+  color: var(--text);
+  outline: none;
+  padding: 0 12px;
+}
+
+.search-box input::placeholder {
+  color: var(--muted);
+}
+
 .user-row {
   width: 100%;
   border: 0;
@@ -279,6 +310,11 @@ input {
   box-shadow: 0 8px 22px rgba(116, 38, 75, 0.08);
 }
 
+.media-message {
+  max-width: 72%;
+  padding: 6px 6px 5px;
+}
+
 .incoming {
   align-self: flex-start;
   background: var(--incoming);
@@ -311,10 +347,29 @@ input {
   font-size: 11px;
 }
 
+.delete-message-button {
+  width: 22px;
+  height: 22px;
+  margin-left: 2px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(191, 52, 121, 0.12);
+  color: var(--accent-strong);
+  display: grid;
+  place-items: center;
+}
+
+.delete-message-button:active {
+  transform: scale(0.94);
+}
+
 .media-preview {
-  max-width: 100%;
+  width: auto;
+  max-width: min(220px, 58vw);
+  max-height: 260px;
   border-radius: 10px;
   display: block;
+  object-fit: cover;
 }
 
 .image-preview-button {
@@ -323,6 +378,7 @@ input {
   border: 0;
   background: transparent;
   color: inherit;
+  cursor: zoom-in;
 }
 
 .audio-preview {

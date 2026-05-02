@@ -10,6 +10,7 @@ import {
   Search,
   Send,
   StopCircle,
+  Trash2,
   X,
 } from "lucide-react";
 
@@ -52,6 +53,7 @@ interface Message {
   type: MessageType;
   file_url: string | null;
   file_name: string | null;
+  telegram_message_id: string | null;
   timestamp: string;
   is_read: number;
 }
@@ -185,6 +187,7 @@ export default function App() {
   const [selectedUser, setSelectedUser] = useState<ChatUser | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
+  const [searchValue, setSearchValue] = useState("");
   const [screen, setScreen] = useState<"list" | "chat">("list");
   const [error, setError] = useState("");
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);
@@ -258,6 +261,11 @@ export default function App() {
       refreshUsers();
     });
 
+    socket.on("message:deleted", ({ id }: { id: number }) => {
+      setMessages((current) => current.filter((message) => message.id !== id));
+      refreshUsers();
+    });
+
     socket.on("admin:users", (updatedUsers: ChatUser[]) => {
       const dedupedUsers = uniqueUsers(updatedUsers);
       setUsers(dedupedUsers);
@@ -273,6 +281,20 @@ export default function App() {
     setUsers(nextUsers);
     return nextUsers;
   }
+
+  const filteredUsers = users.filter((user) => {
+    const search = searchValue.trim().toLowerCase();
+    if (!search) {
+      return true;
+    }
+
+    return [
+      user.first_name,
+      user.age,
+      user.last_message,
+      user.telegram_id,
+    ].some((value) => String(value || "").toLowerCase().includes(search));
+  });
 
   async function openChat(user: ChatUser) {
     setSelectedUser(user);
@@ -297,6 +319,27 @@ export default function App() {
       (result) => {
         if (!result?.ok) {
           alert(result?.error || "Xabar yuborilmadi");
+        }
+      },
+    );
+  }
+
+  function deleteMessage(message: Message) {
+    if (!confirm("Ushbu xabarni o'chirasizmi?")) {
+      return;
+    }
+
+    socketRef.current?.emit(
+      "message:delete",
+      { messageId: message.id },
+      (result: { ok: boolean; error?: string; warning?: string }) => {
+        if (!result?.ok) {
+          alert(result?.error || "Xabar o'chirilmadi");
+          return;
+        }
+
+        if (result.warning) {
+          alert(result.warning);
         }
       },
     );
@@ -424,12 +467,21 @@ export default function App() {
               <h1>Chatlar</h1>
               <div className="header-actions">
                 <Search className="h-5 w-5" />
-                <span className="count-pill">{users.length}</span>
+                <span className="count-pill">{filteredUsers.length}</span>
               </div>
             </header>
 
             <main className="user-list">
-              {users.map((user) => (
+              <label className="search-box">
+                <Search className="h-5 w-5" />
+                <input
+                  value={searchValue}
+                  onChange={(event) => setSearchValue(event.target.value)}
+                  placeholder="Qidirish..."
+                />
+              </label>
+
+              {filteredUsers.map((user) => (
                 <button
                   key={user.telegram_id}
                   type="button"
@@ -450,8 +502,8 @@ export default function App() {
                 </button>
               ))}
 
-              {!users.length && (
-                <div className="empty-list">Hali xabar kelmagan</div>
+              {!filteredUsers.length && (
+                <div className="empty-list">{users.length ? "Mos chat topilmadi" : "Hali xabar kelmagan"}</div>
               )}
             </main>
           </motion.section>
@@ -483,11 +535,19 @@ export default function App() {
               {messages.map((message) => {
                 const outgoing = message.sender_id === me.telegramId;
                 return (
-                  <article key={message.id} className={`message ${outgoing ? "outgoing" : "incoming"}`}>
+                  <article
+                    key={message.id}
+                    className={`message ${outgoing ? "outgoing" : "incoming"} ${message.type !== "text" ? "media-message" : ""}`}
+                  >
                     <MessageBody message={message} onOpenImage={setFullScreenImage} />
                     <div className="message-meta">
                       <span>{formatTime(message.timestamp)}</span>
                       {outgoing && <CheckCheck className="h-3.5 w-3.5" />}
+                      {outgoing && (
+                        <button className="delete-message-button" type="button" onClick={() => deleteMessage(message)} title="Xabarni o'chirish">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
                   </article>
                 );
